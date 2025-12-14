@@ -245,7 +245,32 @@ kintone に API 経由で反映
 ✓ 完了! https://example.cybozu.com/k/123/
 ```
 
-### 6.6 kcdev update
+### 6.6 kcdev types
+
+#### 目的
+
+TypeScript プロジェクトで kintone アプリのフィールド型定義を生成
+
+#### 動作
+
+1. `@kintone/dts-gen` を使用して型定義を生成
+2. 出力先：`src/types/kintone.d.ts`
+3. 認証情報は `.env` → `.kcdev/config.json` の順で取得
+
+#### 起動時の表示
+
+```
+→ 型定義を生成中...
+[dts-gen output]
+✓ 型定義を生成しました: src/types/kintone.d.ts
+```
+
+#### 補足
+
+- TypeScript プロジェクトでは、`kcdev init` 実行時に自動的に型定義が生成される
+- フィールドを追加・変更した場合は、このコマンドで再生成
+
+### 6.7 kcdev update
 
 #### 目的
 

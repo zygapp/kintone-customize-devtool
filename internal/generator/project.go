@@ -38,6 +38,16 @@ func GenerateProject(projectDir string, answers *prompt.InitAnswers) error {
 		return err
 	}
 
+	// TypeScript の場合は tsconfig.json と型定義プレースホルダーを生成
+	if answers.Language == prompt.LanguageTypeScript {
+		if err := generateTSConfig(projectDir, answers.Framework); err != nil {
+			return err
+		}
+		if err := generateTypesPlaceholder(projectDir); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -138,19 +148,26 @@ func copyTemplates(projectDir string, templateDir string) error {
 func generatePackageJSON(projectDir string, answers *prompt.InitAnswers) error {
 	deps := getFrameworkDependencies(answers.Framework, answers.Language)
 
+	scripts := map[string]string{
+		"init":           "kcdev init",
+		"dev":            "kcdev dev",
+		"dev:preview":    "kcdev dev --preview",
+		"build":          "kcdev build",
+		"deploy":         "kcdev deploy",
+		"deploy:preview": "kcdev deploy --preview",
+	}
+
+	// TypeScript の場合は types スクリプトを追加
+	if answers.Language == prompt.LanguageTypeScript {
+		scripts["types"] = "kcdev types"
+	}
+
 	pkg := map[string]interface{}{
-		"name":    answers.ProjectName,
-		"version": "0.0.0",
-		"private": true,
-		"type":    "module",
-		"scripts": map[string]string{
-			"init": "kcdev init",
-			"dev": "kcdev dev",
-			"dev:preview": "kcdev dev --preview",
-			"build": "kcdev build",
-			"deploy": "kcdev deploy",
-			"deploy:preview": "kcdev deploy --preview",
-		},
+		"name":            answers.ProjectName,
+		"version":         "0.0.0",
+		"private":         true,
+		"type":            "module",
+		"scripts":         scripts,
 		"dependencies":    deps.dependencies,
 		"devDependencies": deps.devDependencies,
 	}
@@ -178,6 +195,7 @@ func getFrameworkDependencies(framework prompt.Framework, language prompt.Langua
 
 	if language == prompt.LanguageTypeScript {
 		deps.devDependencies["typescript"] = "^5.3.0"
+		deps.devDependencies["@kintone/dts-gen"] = "^8.0.0"
 	}
 
 	switch framework {
@@ -205,6 +223,63 @@ func getFrameworkDependencies(framework prompt.Framework, language prompt.Langua
 	}
 
 	return deps
+}
+
+func generateTypesPlaceholder(projectDir string) error {
+	typesDir := filepath.Join(projectDir, "src", "types")
+	if err := os.MkdirAll(typesDir, 0755); err != nil {
+		return err
+	}
+
+	content := `// このファイルは kcdev types コマンドで自動生成されます
+// kintone アプリのフィールド型定義が含まれます
+//
+// 生成するには: kcdev types
+//
+// 注意: このファイルは手動で編集しないでください
+
+declare namespace kintone.types {
+  // kcdev types を実行すると、ここにフィールド型が生成されます
+}
+`
+	return os.WriteFile(filepath.Join(typesDir, "kintone.d.ts"), []byte(content), 0644)
+}
+
+func generateTSConfig(projectDir string, framework prompt.Framework) error {
+	var jsx string
+	switch framework {
+	case prompt.FrameworkReact:
+		jsx = `"jsx": "react-jsx",`
+	default:
+		jsx = ""
+	}
+
+	// jsx の行がある場合は改行を追加
+	if jsx != "" {
+		jsx = "\n    " + jsx
+	}
+
+	content := fmt.Sprintf(`{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,%s
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": []
+  },
+  "files": [
+    "./node_modules/@kintone/dts-gen/kintone.d.ts",
+    "./src/types/kintone.d.ts"
+  ],
+  "include": [
+    "src/**/*"
+  ]
+}
+`, jsx)
+
+	return os.WriteFile(filepath.Join(projectDir, "tsconfig.json"), []byte(content), 0644)
 }
 
 func generateGitignore(projectDir string) error {

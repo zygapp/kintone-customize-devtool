@@ -143,6 +143,18 @@ kcdev build && kcdev deploy
 | `-f, --force` | 既存カスタマイズの確認をスキップして上書き |
 | `-p, --preview` | プレビュー環境のみにデプロイ（本番反映しない） |
 
+### `kcdev types`
+
+TypeScript プロジェクトで、kintone アプリのフィールド型定義を生成します。
+
+```bash
+kcdev types
+```
+
+@kintone/dts-gen を使用して `src/types/kintone.d.ts` を生成します。
+
+**Note:** TypeScript プロジェクトでは、`kcdev init` 実行時に自動的に型定義が生成されます。フィールドを追加・変更した場合は、このコマンドで再生成してください。
+
 ### `kcdev update`
 
 Vite およびフレームワークプラグインを最新版に更新します。

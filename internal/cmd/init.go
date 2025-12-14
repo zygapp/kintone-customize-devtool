@@ -147,6 +147,16 @@ func runInit(cmd *cobra.Command, args []string) error {
 		if err := installCmd.Run(); err != nil {
 			return fmt.Errorf("インストールエラー: %w", err)
 		}
+
+		// TypeScript の場合、型定義を生成
+		if answers.Language == prompt.LanguageTypeScript {
+			if err := generateTypes(projectDir, cfg, answers.Username, answers.Password); err != nil {
+				// 型定義生成の失敗は警告のみ（プロジェクト作成は成功として扱う）
+				yellow := color.New(color.FgYellow).SprintFunc()
+				fmt.Printf("\n%s 型定義の生成をスキップしました: %v\n", yellow("⚠"), err)
+				fmt.Printf("  後で %s を実行して型定義を生成できます\n", cyan("kcdev types"))
+			}
+		}
 	}
 
 	printSuccess(projectDir, answers, isExisting)

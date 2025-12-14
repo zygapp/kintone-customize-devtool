@@ -23,4 +23,5 @@ func init() {
 	rootCmd.AddCommand(devCmd)
 	rootCmd.AddCommand(buildCmd)
 	rootCmd.AddCommand(deployCmd)
+	rootCmd.AddCommand(typesCmd)
 }
