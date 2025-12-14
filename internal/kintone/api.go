@@ -280,10 +280,10 @@ type CustomizeFiles struct {
 	CSSFileKey string
 }
 
-func (c *Client) UpdateCustomize(appID int, desktopFiles, mobileFiles *CustomizeFiles) error {
+func (c *Client) UpdateCustomize(appID int, desktopFiles, mobileFiles *CustomizeFiles, scope CustomizeScope) error {
 	customize := CustomizeRequest{
 		App:   appID,
-		Scope: ScopeAll,
+		Scope: scope,
 	}
 
 	// Desktop

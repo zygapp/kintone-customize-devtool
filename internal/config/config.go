@@ -15,12 +15,20 @@ type Config struct {
 	Kintone KintoneConfig `json:"kintone"`
 	Dev     DevConfig     `json:"dev"`
 	Targets TargetsConfig `json:"targets"`
+	Scope   string        `json:"scope"`
 }
 
 type TargetsConfig struct {
 	Desktop bool `json:"desktop"`
 	Mobile  bool `json:"mobile"`
 }
+
+// Scope constants
+const (
+	ScopeAll   = "ALL"
+	ScopeAdmin = "ADMIN"
+	ScopeNone  = "NONE"
+)
 
 type KintoneConfig struct {
 	Domain string     `json:"domain"`
@@ -48,6 +56,7 @@ func DefaultConfig() *Config {
 			Desktop: true,
 			Mobile:  false,
 		},
+		Scope: ScopeAll,
 	}
 }
 

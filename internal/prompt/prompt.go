@@ -30,6 +30,14 @@ const (
 	PackageManagerBun  PackageManager = "bun"
 )
 
+type Scope string
+
+const (
+	ScopeAll   Scope = "ALL"
+	ScopeAdmin Scope = "ADMIN"
+	ScopeNone  Scope = "NONE"
+)
+
 type InitAnswers struct {
 	ProjectName    string
 	CreateDir      bool
@@ -42,6 +50,7 @@ type InitAnswers struct {
 	PackageManager PackageManager
 	TargetDesktop  bool
 	TargetMobile   bool
+	Scope          Scope
 }
 
 func AskCreateDir() (bool, error) {
@@ -250,4 +259,44 @@ func AskTargets(defaultDesktop, defaultMobile bool) (desktop bool, mobile bool, 
 	}
 
 	return desktop, mobile, nil
+}
+
+func AskScope(defaultScope Scope) (Scope, error) {
+	green := color.New(color.FgGreen).SprintFunc()
+	yellow := color.New(color.FgYellow).SprintFunc()
+	red := color.New(color.FgRed).SprintFunc()
+
+	options := []string{
+		green("すべてのユーザーに適用 (ALL)"),
+		yellow("アプリ管理者のみに適用 (ADMIN)"),
+		red("適用しない (NONE)"),
+	}
+
+	defaultIndex := 0
+	switch defaultScope {
+	case ScopeAdmin:
+		defaultIndex = 1
+	case ScopeNone:
+		defaultIndex = 2
+	}
+
+	var answer string
+	prompt := &survey.Select{
+		Message: "カスタマイズの適用範囲:",
+		Options: options,
+		Default: options[defaultIndex],
+	}
+	if err := survey.AskOne(prompt, &answer); err != nil {
+		return "", err
+	}
+
+	switch answer {
+	case options[0]:
+		return ScopeAll, nil
+	case options[1]:
+		return ScopeAdmin, nil
+	case options[2]:
+		return ScopeNone, nil
+	}
+	return ScopeAll, nil
 }

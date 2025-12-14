@@ -177,7 +177,11 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	// カスタマイズ設定を更新
 	fmt.Printf("  設定...")
-	if err := client.UpdateCustomize(cfg.Kintone.AppID, desktopFiles, mobileFiles); err != nil {
+	scope := kintone.CustomizeScope(cfg.Scope)
+	if scope == "" {
+		scope = kintone.ScopeAll
+	}
+	if err := client.UpdateCustomize(cfg.Kintone.AppID, desktopFiles, mobileFiles, scope); err != nil {
 		fmt.Println()
 		return fmt.Errorf("カスタマイズ設定エラー: %w", err)
 	}

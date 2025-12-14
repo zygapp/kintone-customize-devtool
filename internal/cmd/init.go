@@ -129,6 +129,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 			Desktop: answers.TargetDesktop,
 			Mobile:  answers.TargetMobile,
 		},
+		Scope: string(answers.Scope),
 	}
 	if err := cfg.Save(projectDir); err != nil {
 		return fmt.Errorf("設定保存エラー: %w", err)
@@ -304,12 +305,16 @@ func collectAnswers(projectDir string, projectName string) (*prompt.InitAnswers,
 	// カスタマイズ対象（desktop/mobile）
 	defaultDesktop := true
 	defaultMobile := false
+	defaultScope := prompt.ScopeAll
 	if cfg, err := config.Load(projectDir); err == nil {
 		defaultDesktop = cfg.Targets.Desktop
 		defaultMobile = cfg.Targets.Mobile
 		// 既存設定がない場合のデフォルト
 		if !defaultDesktop && !defaultMobile {
 			defaultDesktop = true
+		}
+		if cfg.Scope != "" {
+			defaultScope = prompt.Scope(cfg.Scope)
 		}
 	}
 	desktop, mobile, err := prompt.AskTargets(defaultDesktop, defaultMobile)
@@ -318,6 +323,13 @@ func collectAnswers(projectDir string, projectName string) (*prompt.InitAnswers,
 	}
 	answers.TargetDesktop = desktop
 	answers.TargetMobile = mobile
+
+	// カスタマイズの適用範囲
+	scope, err := prompt.AskScope(defaultScope)
+	if err != nil {
+		return nil, err
+	}
+	answers.Scope = scope
 
 	return answers, nil
 }
