@@ -6,17 +6,24 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/fatih/color"
 	"github.com/kintone/kcdev/internal/config"
 	"github.com/kintone/kcdev/internal/kintone"
 	"github.com/spf13/cobra"
 )
 
+var forceOverwrite bool
+
 var deployCmd = &cobra.Command{
 	Use:   "deploy",
 	Short: "kintoneにデプロイ",
 	Long:  `ビルド成果物をkintoneにアップロードしてデプロイします。`,
 	RunE:  runDeploy,
+}
+
+func init() {
+	deployCmd.Flags().BoolVarP(&forceOverwrite, "force", "f", false, "既存カスタマイズを確認せず上書き")
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {
@@ -67,6 +74,49 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	fmt.Printf("\n%s デプロイ中... (%s, App:%d, %s)\n", cyan("→"), cfg.Kintone.Domain, cfg.Kintone.AppID, strings.Join(targets, "+"))
 
 	client := kintone.NewClient(cfg.Kintone.Domain, username, password)
+
+	// 既存カスタマイズの確認
+	if !forceOverwrite {
+		kcdevFiles := []string{"customize.js", "customize.css", "kintone-dev-loader.js"}
+		existing, err := client.GetExistingCustomizations(cfg.Kintone.AppID, kcdevFiles)
+		if err != nil {
+			yellow := color.New(color.FgYellow).SprintFunc()
+			fmt.Printf("  %s 既存カスタマイズの確認をスキップ: %v\n", yellow("⚠"), err)
+		} else if existing.HasExisting() {
+			yellow := color.New(color.FgYellow).SprintFunc()
+			fmt.Printf("\n  %s 既存のカスタマイズが検出されました:\n", yellow("⚠"))
+
+			// 詳細を表示
+			if len(existing.Desktop.JS) > 0 {
+				fmt.Printf("    Desktop JS: %s\n", strings.Join(existing.Desktop.JS, ", "))
+			}
+			if len(existing.Desktop.CSS) > 0 {
+				fmt.Printf("    Desktop CSS: %s\n", strings.Join(existing.Desktop.CSS, ", "))
+			}
+			if len(existing.Mobile.JS) > 0 {
+				fmt.Printf("    Mobile JS: %s\n", strings.Join(existing.Mobile.JS, ", "))
+			}
+			if len(existing.Mobile.CSS) > 0 {
+				fmt.Printf("    Mobile CSS: %s\n", strings.Join(existing.Mobile.CSS, ", "))
+			}
+
+			fmt.Println()
+
+			var confirm bool
+			prompt := &survey.Confirm{
+				Message: "これらのカスタマイズは上書きされます。続行しますか?",
+				Default: false,
+			}
+			if err := survey.AskOne(prompt, &confirm); err != nil {
+				return fmt.Errorf("キャンセルされました")
+			}
+			if !confirm {
+				fmt.Println("デプロイをキャンセルしました。")
+				return nil
+			}
+			fmt.Println()
+		}
+	}
 
 	cssPath := filepath.Join(projectDir, "dist", "customize.css")
 	hasCss := false

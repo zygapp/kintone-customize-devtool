@@ -1,4 +1,4 @@
-# kcdev（kintone customize developer）仕様書 v0.1
+# kcdev（kintone customize developer）仕様書 v0.2
 
 ## 1. 目的
 
@@ -82,8 +82,9 @@ Go本体 + npmラッパー（全プラットフォームのバイナリを1パ�
 4. アプリID
 5. フレームワーク選択：`React` | `Vue` | `Svelte` | `Vanilla`
 6. 言語選択：`TypeScript` | `JavaScript`
-7. 認証情報（ユーザー名、パスワード）
-8. パッケージマネージャー選択：`npm` | `pnpm` | `yarn` | `bun`
+7. カスタマイズ対象：`デスクトップ` | `モバイル`（複数選択可）
+8. 認証情報（ユーザー名、パスワード）
+9. パッケージマネージャー選択：`npm` | `pnpm` | `yarn` | `bun`
 
 #### 対話スキップ条件
 
@@ -150,16 +151,19 @@ Go本体 + npmラッパー（全プラットフォームのバイナリを1パ�
 
 #### 動作
 
-1. ローダー（`.kcdev/managed/kintone-dev-loader.js`）をkintoneにアップロード
-2. アプリのJSカスタマイズ設定を更新
-3. アプリをデプロイ
-4. Vite dev server を起動（`https://localhost:3000`）
-5. ブラウザを自動で開く
+1. 既存のカスタマイズ設定を確認
+   - kcdev管理ファイル（`customize.js`, `customize.css`, `kintone-dev-loader.js`）以外がある場合は確認プロンプトを表示
+2. ローダー（`.kcdev/managed/kintone-dev-loader.js`）をkintoneにアップロード
+3. アプリのJSカスタマイズ設定を更新
+4. アプリをデプロイ
+5. Vite dev server を起動（`https://localhost:3000`）
+6. ブラウザを自動で開く
 
 #### オプション
 
 - `--skip-deploy`: ローダーのデプロイをスキップ（2回目以降の起動時など）
 - `--no-browser`: ブラウザを自動で開かない
+- `-f, --force`: 既存カスタマイズの確認をスキップして上書き
 
 #### 起動時の表示
 
@@ -208,10 +212,16 @@ kintone に API 経由で反映
 
 #### 手順
 
-1. `POST /k/v1/file.json`（JS/CSSアップロード）
-2. `PUT /k/v1/preview/app/customize.json`
-3. `POST /k/v1/preview/app/deploy.json`
-4. `GET /k/v1/preview/app/deploy.json`（完了待ち）
+1. 既存のカスタマイズ設定を確認
+   - kcdev管理ファイル（`customize.js`, `customize.css`, `kintone-dev-loader.js`）以外がある場合は確認プロンプトを表示
+2. `POST /k/v1/file.json`（JS/CSSアップロード）
+3. `PUT /k/v1/preview/app/customize.json`
+4. `POST /k/v1/preview/app/deploy.json`
+5. `GET /k/v1/preview/app/deploy.json`（完了待ち）
+
+#### オプション
+
+- `-f, --force`: 既存カスタマイズの確認をスキップして上書き
 
 #### 認証
 
@@ -349,6 +359,10 @@ kintone（classic）と Vite（ESM）をつなぐ唯一の橋
   "dev": {
     "origin": "https://localhost:3000",
     "entry": "/src/main.tsx"
+  },
+  "targets": {
+    "desktop": true,
+    "mobile": false
   }
 }
 ```

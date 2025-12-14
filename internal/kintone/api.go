@@ -110,6 +110,157 @@ type FileCustomization struct {
 
 type File struct {
 	FileKey string `json:"fileKey"`
+	Name    string `json:"name,omitempty"`
+	Size    string `json:"size,omitempty"`
+}
+
+// GetCustomize は現在のカスタマイズ設定を取得する
+type CustomizeResponse struct {
+	Scope   CustomizeScope                 `json:"scope"`
+	Desktop *CustomizeDesktopMobileResponse `json:"desktop"`
+	Mobile  *CustomizeDesktopMobileResponse `json:"mobile"`
+}
+
+type CustomizeDesktopMobileResponse struct {
+	JS  []FileCustomizationResponse `json:"js"`
+	CSS []FileCustomizationResponse `json:"css"`
+}
+
+type FileCustomizationResponse struct {
+	Type string       `json:"type"`
+	File *FileResponse `json:"file,omitempty"`
+	URL  string       `json:"url,omitempty"`
+}
+
+type FileResponse struct {
+	FileKey   string `json:"fileKey"`
+	Name      string `json:"name"`
+	Size      string `json:"size"`
+	ContentType string `json:"contentType,omitempty"`
+}
+
+// GetCustomize は現在のカスタマイズ設定を取得する
+func (c *Client) GetCustomize(appID int) (*CustomizeResponse, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/k/v1/app/customize.json?app=%d", c.baseURL(), appID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("X-Cybozu-Authorization", c.authHeader())
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("カスタマイズ取得エラー: %s - %s", resp.Status, string(respBody))
+	}
+
+	var result CustomizeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+// ExistingCustomizations は既存のカスタマイズ情報を表す
+type ExistingCustomizations struct {
+	Desktop ExistingFiles
+	Mobile  ExistingFiles
+}
+
+type ExistingFiles struct {
+	JS  []string // ファイル名のリスト
+	CSS []string
+}
+
+// GetExistingCustomizations は kcdev 管理外のカスタマイズを取得する
+func (c *Client) GetExistingCustomizations(appID int, kcdevFiles []string) (*ExistingCustomizations, error) {
+	customize, err := c.GetCustomize(appID)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &ExistingCustomizations{}
+
+	// kcdev 管理ファイルかどうかをチェック
+	isKcdevFile := func(name string) bool {
+		for _, f := range kcdevFiles {
+			if name == f {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Desktop
+	if customize.Desktop != nil {
+		for _, js := range customize.Desktop.JS {
+			if js.Type == "FILE" && js.File != nil && !isKcdevFile(js.File.Name) {
+				result.Desktop.JS = append(result.Desktop.JS, js.File.Name)
+			} else if js.Type == "URL" && js.URL != "" {
+				result.Desktop.JS = append(result.Desktop.JS, js.URL)
+			}
+		}
+		for _, css := range customize.Desktop.CSS {
+			if css.Type == "FILE" && css.File != nil && !isKcdevFile(css.File.Name) {
+				result.Desktop.CSS = append(result.Desktop.CSS, css.File.Name)
+			} else if css.Type == "URL" && css.URL != "" {
+				result.Desktop.CSS = append(result.Desktop.CSS, css.URL)
+			}
+		}
+	}
+
+	// Mobile
+	if customize.Mobile != nil {
+		for _, js := range customize.Mobile.JS {
+			if js.Type == "FILE" && js.File != nil && !isKcdevFile(js.File.Name) {
+				result.Mobile.JS = append(result.Mobile.JS, js.File.Name)
+			} else if js.Type == "URL" && js.URL != "" {
+				result.Mobile.JS = append(result.Mobile.JS, js.URL)
+			}
+		}
+		for _, css := range customize.Mobile.CSS {
+			if css.Type == "FILE" && css.File != nil && !isKcdevFile(css.File.Name) {
+				result.Mobile.CSS = append(result.Mobile.CSS, css.File.Name)
+			} else if css.Type == "URL" && css.URL != "" {
+				result.Mobile.CSS = append(result.Mobile.CSS, css.URL)
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// HasExisting は kcdev 管理外のカスタマイズがあるかチェック
+func (e *ExistingCustomizations) HasExisting() bool {
+	return len(e.Desktop.JS) > 0 || len(e.Desktop.CSS) > 0 ||
+		len(e.Mobile.JS) > 0 || len(e.Mobile.CSS) > 0
+}
+
+// Summary は既存カスタマイズの概要を返す
+func (e *ExistingCustomizations) Summary() string {
+	var parts []string
+	if len(e.Desktop.JS) > 0 {
+		parts = append(parts, fmt.Sprintf("Desktop JS: %d件", len(e.Desktop.JS)))
+	}
+	if len(e.Desktop.CSS) > 0 {
+		parts = append(parts, fmt.Sprintf("Desktop CSS: %d件", len(e.Desktop.CSS)))
+	}
+	if len(e.Mobile.JS) > 0 {
+		parts = append(parts, fmt.Sprintf("Mobile JS: %d件", len(e.Mobile.JS)))
+	}
+	if len(e.Mobile.CSS) > 0 {
+		parts = append(parts, fmt.Sprintf("Mobile CSS: %d件", len(e.Mobile.CSS)))
+	}
+	if len(parts) == 0 {
+		return "なし"
+	}
+	return fmt.Sprintf("%v", parts)
 }
 
 type CustomizeRequest struct {

@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/fatih/color"
 	"github.com/kintone/kcdev/internal/config"
 	"github.com/kintone/kcdev/internal/generator"
@@ -20,6 +21,7 @@ import (
 
 var skipDeploy bool
 var noBrowser bool
+var forceDevOverwrite bool
 
 var devCmd = &cobra.Command{
 	Use:   "dev",
@@ -31,6 +33,7 @@ var devCmd = &cobra.Command{
 func init() {
 	devCmd.Flags().BoolVar(&skipDeploy, "skip-deploy", false, "ローダーのデプロイをスキップ")
 	devCmd.Flags().BoolVar(&noBrowser, "no-browser", false, "ブラウザを自動で開かない")
+	devCmd.Flags().BoolVarP(&forceDevOverwrite, "force", "f", false, "既存カスタマイズを確認せず上書き")
 }
 
 func runDev(cmd *cobra.Command, args []string) error {
@@ -64,7 +67,7 @@ func runDev(cmd *cobra.Command, args []string) error {
 
 	// デプロイ
 	if !skipDeploy {
-		if err := deployLoader(projectDir, cfg, username, password); err != nil {
+		if err := deployLoader(projectDir, cfg, username, password, forceDevOverwrite); err != nil {
 			return err
 		}
 	}
@@ -122,7 +125,7 @@ func openBrowser(url string) error {
 	return cmd.Start()
 }
 
-func deployLoader(projectDir string, cfg *config.Config, username, password string) error {
+func deployLoader(projectDir string, cfg *config.Config, username, password string, force bool) error {
 	green := color.New(color.FgGreen).SprintFunc()
 	cyan := color.New(color.FgCyan).SprintFunc()
 
@@ -130,6 +133,49 @@ func deployLoader(projectDir string, cfg *config.Config, username, password stri
 
 	client := kintone.NewClient(cfg.Kintone.Domain, username, password)
 	loaderPath := filepath.Join(projectDir, config.ConfigDir, "managed", "kintone-dev-loader.js")
+
+	// 既存カスタマイズの確認
+	if !force {
+		kcdevFiles := []string{"customize.js", "customize.css", "kintone-dev-loader.js"}
+		existing, err := client.GetExistingCustomizations(cfg.Kintone.AppID, kcdevFiles)
+		if err != nil {
+			yellow := color.New(color.FgYellow).SprintFunc()
+			fmt.Printf("  %s 既存カスタマイズの確認をスキップ: %v\n", yellow("⚠"), err)
+		} else if existing.HasExisting() {
+			yellow := color.New(color.FgYellow).SprintFunc()
+			fmt.Printf("\n  %s 既存のカスタマイズが検出されました:\n", yellow("⚠"))
+
+			// 詳細を表示
+			if len(existing.Desktop.JS) > 0 {
+				fmt.Printf("    Desktop JS: %s\n", strings.Join(existing.Desktop.JS, ", "))
+			}
+			if len(existing.Desktop.CSS) > 0 {
+				fmt.Printf("    Desktop CSS: %s\n", strings.Join(existing.Desktop.CSS, ", "))
+			}
+			if len(existing.Mobile.JS) > 0 {
+				fmt.Printf("    Mobile JS: %s\n", strings.Join(existing.Mobile.JS, ", "))
+			}
+			if len(existing.Mobile.CSS) > 0 {
+				fmt.Printf("    Mobile CSS: %s\n", strings.Join(existing.Mobile.CSS, ", "))
+			}
+
+			fmt.Println()
+
+			var confirm bool
+			prompt := &survey.Confirm{
+				Message: "これらのカスタマイズは上書きされます。続行しますか?",
+				Default: false,
+			}
+			if err := survey.AskOne(prompt, &confirm); err != nil {
+				return fmt.Errorf("キャンセルされました")
+			}
+			if !confirm {
+				fmt.Println("デプロイをキャンセルしました。")
+				return fmt.Errorf("デプロイがキャンセルされました")
+			}
+			fmt.Println()
+		}
+	}
 
 	var desktopFiles *kintone.CustomizeFiles
 	var mobileFiles *kintone.CustomizeFiles
