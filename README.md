@@ -51,6 +51,7 @@ cd my-app
 - フレームワーク（React / Vue / Svelte / Vanilla）
 - 言語（TypeScript / JavaScript）
 - カスタマイズ対象（デスクトップ / モバイル）
+- 適用範囲（ALL / ADMIN / NONE）
 - 認証情報
 
 ### 3. 開発開始
@@ -109,10 +110,13 @@ kcdev dev
 | `--skip-deploy` | ローダーのデプロイをスキップ（2回目以降の起動時に便利） |
 | `--no-browser` | ブラウザを自動で開かない |
 | `-f, --force` | 既存カスタマイズの確認をスキップして上書き |
+| `--preview` | プレビュー環境のみにデプロイ（本番反映しない） |
 
 ### `kcdev build`
 
 本番用ビルドを生成します。IIFE 形式で `dist/` に出力されます。
+
+`console.error` 以外の `console.*` と `debugger` は自動的に削除されます。
 
 ```bash
 kcdev build
@@ -137,6 +141,7 @@ kcdev build && kcdev deploy
 | オプション | 説明 |
 |-----------|------|
 | `-f, --force` | 既存カスタマイズの確認をスキップして上書き |
+| `--preview` | プレビュー環境のみにデプロイ（本番反映しない） |
 
 ### `kcdev update`
 

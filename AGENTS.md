@@ -24,14 +24,16 @@ src/main.*
 
 ## CLIコマンド
 
-- `kcdev init` - プロジェクト初期化（プロジェクト名、kintoneドメイン、アプリID、フレームワーク、言語、カスタマイズ対象を対話形式で入力）
+- `kcdev init` - プロジェクト初期化（プロジェクト名、kintoneドメイン、アプリID、フレームワーク、言語、カスタマイズ対象、適用範囲を対話形式で入力）
 - `kcdev dev` - ローダーをkintoneにデプロイし、Vite dev serverをHTTPS（localhost:3000）で起動
   - 既存カスタマイズがある場合は確認プロンプトを表示
   - `-f, --force`: 確認をスキップして上書き
-- `kcdev build` - 本番用IIFEバンドルを`dist/`に生成
+  - `--preview`: プレビュー環境のみにデプロイ（本番反映しない）
+- `kcdev build` - 本番用IIFEバンドルを`dist/`に生成（console.error以外のconsole.*とdebuggerは自動削除）
 - `kcdev deploy` - ビルド成果物をkintoneにAPI経由でデプロイ
   - 既存カスタマイズがある場合は確認プロンプトを表示
   - `-f, --force`: 確認をスキップして上書き
+  - `--preview`: プレビュー環境のみにデプロイ（本番反映しない）
 - `kcdev update` - Viteおよびフレームワークプラグインを最新版に更新
 
 ## 配布方式
