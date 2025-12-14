@@ -1,9 +1,13 @@
 .PHONY: build clean install test build-all npm-prepare npm-package npm-publish npm-publish-token npm-dry-run version-sync
 
+# .env から環境変数を読み込み
+-include .env
+export
+
 # ========================================
 # バージョン（ここを変更するだけで全体に反映）
 # ========================================
-VERSION := 0.3.0
+VERSION := 0.3.1
 
 BINARY_NAME := kcdev
 BUILD_DIR := build
