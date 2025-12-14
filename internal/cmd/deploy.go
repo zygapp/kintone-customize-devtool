@@ -14,6 +14,7 @@ import (
 )
 
 var forceOverwrite bool
+var previewOnlyDeploy bool
 
 var deployCmd = &cobra.Command{
 	Use:   "deploy",
@@ -24,6 +25,7 @@ var deployCmd = &cobra.Command{
 
 func init() {
 	deployCmd.Flags().BoolVarP(&forceOverwrite, "force", "f", false, "既存カスタマイズを確認せず上書き")
+	deployCmd.Flags().BoolVar(&previewOnlyDeploy, "preview", false, "プレビュー環境のみにデプロイ（本番反映しない）")
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {
@@ -71,7 +73,11 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		targets = append(targets, "Desktop") // デフォルト
 	}
 
-	fmt.Printf("\n%s デプロイ中... (%s, App:%d, %s)\n", cyan("→"), cfg.Kintone.Domain, cfg.Kintone.AppID, strings.Join(targets, "+"))
+	if previewOnlyDeploy {
+		fmt.Printf("\n%s プレビュー環境にデプロイ中... (%s, App:%d, %s)\n", cyan("→"), cfg.Kintone.Domain, cfg.Kintone.AppID, strings.Join(targets, "+"))
+	} else {
+		fmt.Printf("\n%s デプロイ中... (%s, App:%d, %s)\n", cyan("→"), cfg.Kintone.Domain, cfg.Kintone.AppID, strings.Join(targets, "+"))
+	}
 
 	client := kintone.NewClient(cfg.Kintone.Domain, username, password)
 
@@ -187,20 +193,26 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf(" %s\n", green("✓"))
 
-	// アプリをデプロイ
-	fmt.Printf("  デプロイ...")
-	if err := client.DeployApp(cfg.Kintone.AppID); err != nil {
-		fmt.Println()
-		return fmt.Errorf("デプロイ開始エラー: %w", err)
-	}
+	// アプリをデプロイ（プレビューのみの場合はスキップ）
+	if !previewOnlyDeploy {
+		fmt.Printf("  デプロイ...")
+		if err := client.DeployApp(cfg.Kintone.AppID); err != nil {
+			fmt.Println()
+			return fmt.Errorf("デプロイ開始エラー: %w", err)
+		}
 
-	if err := client.WaitForDeploy(cfg.Kintone.AppID); err != nil {
-		fmt.Println()
-		return fmt.Errorf("デプロイ待機エラー: %w", err)
-	}
-	fmt.Printf(" %s\n", green("✓"))
+		if err := client.WaitForDeploy(cfg.Kintone.AppID); err != nil {
+			fmt.Println()
+			return fmt.Errorf("デプロイ待機エラー: %w", err)
+		}
+		fmt.Printf(" %s\n", green("✓"))
 
-	fmt.Printf("\n%s 完了! https://%s/k/%d/\n\n", green("✓"), cfg.Kintone.Domain, cfg.Kintone.AppID)
+		fmt.Printf("\n%s 完了! https://%s/k/%d/\n\n", green("✓"), cfg.Kintone.Domain, cfg.Kintone.AppID)
+	} else {
+		yellow := color.New(color.FgYellow).SprintFunc()
+		fmt.Printf("  %s プレビュー環境のみに適用（本番反映はスキップ）\n", yellow("⚠"))
+		fmt.Printf("\n%s プレビュー環境に適用しました! https://%s/k/admin/app/flow?app=%d\n\n", green("✓"), cfg.Kintone.Domain, cfg.Kintone.AppID)
+	}
 
 	return nil
 }

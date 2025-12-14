@@ -144,8 +144,12 @@ func generatePackageJSON(projectDir string, answers *prompt.InitAnswers) error {
 		"private": true,
 		"type":    "module",
 		"scripts": map[string]string{
-			"dev":   "kcdev dev",
+			"init": "kcdev init",
+			"dev": "kcdev dev",
+			"dev:preview": "kcdev dev --preview",
 			"build": "kcdev build",
+			"deploy": "kcdev deploy",
+			"deploy:preview": "kcdev deploy --preview",
 		},
 		"dependencies":    deps.dependencies,
 		"devDependencies": deps.devDependencies,

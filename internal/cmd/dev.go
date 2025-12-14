@@ -22,6 +22,7 @@ import (
 var skipDeploy bool
 var noBrowser bool
 var forceDevOverwrite bool
+var previewOnlyDev bool
 
 var devCmd = &cobra.Command{
 	Use:   "dev",
@@ -34,6 +35,7 @@ func init() {
 	devCmd.Flags().BoolVar(&skipDeploy, "skip-deploy", false, "ローダーのデプロイをスキップ")
 	devCmd.Flags().BoolVar(&noBrowser, "no-browser", false, "ブラウザを自動で開かない")
 	devCmd.Flags().BoolVarP(&forceDevOverwrite, "force", "f", false, "既存カスタマイズを確認せず上書き")
+	devCmd.Flags().BoolVar(&previewOnlyDev, "preview", false, "プレビュー環境のみにデプロイ（本番反映しない）")
 }
 
 func runDev(cmd *cobra.Command, args []string) error {
@@ -67,7 +69,7 @@ func runDev(cmd *cobra.Command, args []string) error {
 
 	// デプロイ
 	if !skipDeploy {
-		if err := deployLoader(projectDir, cfg, username, password, forceDevOverwrite); err != nil {
+		if err := deployLoader(projectDir, cfg, username, password, forceDevOverwrite, previewOnlyDev); err != nil {
 			return err
 		}
 	}
@@ -125,11 +127,15 @@ func openBrowser(url string) error {
 	return cmd.Start()
 }
 
-func deployLoader(projectDir string, cfg *config.Config, username, password string, force bool) error {
+func deployLoader(projectDir string, cfg *config.Config, username, password string, force bool, previewOnly bool) error {
 	green := color.New(color.FgGreen).SprintFunc()
 	cyan := color.New(color.FgCyan).SprintFunc()
 
-	fmt.Printf("\n%s ローダーをkintoneにデプロイ中...\n", cyan("→"))
+	if previewOnly {
+		fmt.Printf("\n%s ローダーをkintoneプレビュー環境にデプロイ中...\n", cyan("→"))
+	} else {
+		fmt.Printf("\n%s ローダーをkintoneにデプロイ中...\n", cyan("→"))
+	}
 
 	client := kintone.NewClient(cfg.Kintone.Domain, username, password)
 	loaderPath := filepath.Join(projectDir, config.ConfigDir, "managed", "kintone-dev-loader.js")
@@ -216,18 +222,23 @@ func deployLoader(projectDir string, cfg *config.Config, username, password stri
 	}
 	fmt.Printf(" %s\n", green("✓"))
 
-	// アプリをデプロイ
-	fmt.Printf("  デプロイ...")
-	if err := client.DeployApp(cfg.Kintone.AppID); err != nil {
-		fmt.Println()
-		return fmt.Errorf("デプロイ開始エラー: %w", err)
-	}
+	// アプリをデプロイ（プレビューのみの場合はスキップ）
+	if !previewOnly {
+		fmt.Printf("  デプロイ...")
+		if err := client.DeployApp(cfg.Kintone.AppID); err != nil {
+			fmt.Println()
+			return fmt.Errorf("デプロイ開始エラー: %w", err)
+		}
 
-	if err := client.WaitForDeploy(cfg.Kintone.AppID); err != nil {
-		fmt.Println()
-		return fmt.Errorf("デプロイ待機エラー: %w", err)
+		if err := client.WaitForDeploy(cfg.Kintone.AppID); err != nil {
+			fmt.Println()
+			return fmt.Errorf("デプロイ待機エラー: %w", err)
+		}
+		fmt.Printf(" %s\n", green("✓"))
+	} else {
+		yellow := color.New(color.FgYellow).SprintFunc()
+		fmt.Printf("  %s プレビュー環境のみに適用（本番反映はスキップ）\n", yellow("⚠"))
 	}
-	fmt.Printf(" %s\n", green("✓"))
 
 	return nil
 }
