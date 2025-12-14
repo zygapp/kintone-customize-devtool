@@ -35,7 +35,7 @@ func init() {
 	devCmd.Flags().BoolVar(&skipDeploy, "skip-deploy", false, "ローダーのデプロイをスキップ")
 	devCmd.Flags().BoolVar(&noBrowser, "no-browser", false, "ブラウザを自動で開かない")
 	devCmd.Flags().BoolVarP(&forceDevOverwrite, "force", "f", false, "既存カスタマイズを確認せず上書き")
-	devCmd.Flags().BoolVar(&previewOnlyDev, "preview", false, "プレビュー環境のみにデプロイ（本番反映しない）")
+	devCmd.Flags().BoolVarP(&previewOnlyDev, "preview", "p", false, "プレビュー環境のみにデプロイ（本番反映しない）")
 }
 
 func runDev(cmd *cobra.Command, args []string) error {

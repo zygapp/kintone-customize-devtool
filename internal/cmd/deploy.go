@@ -25,7 +25,7 @@ var deployCmd = &cobra.Command{
 
 func init() {
 	deployCmd.Flags().BoolVarP(&forceOverwrite, "force", "f", false, "既存カスタマイズを確認せず上書き")
-	deployCmd.Flags().BoolVar(&previewOnlyDeploy, "preview", false, "プレビュー環境のみにデプロイ（本番反映しない）")
+	deployCmd.Flags().BoolVarP(&previewOnlyDeploy, "preview", "p", false, "プレビュー環境のみにデプロイ（本番反映しない）")
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {

@@ -28,12 +28,12 @@ src/main.*
 - `kcdev dev` - ローダーをkintoneにデプロイし、Vite dev serverをHTTPS（localhost:3000）で起動
   - 既存カスタマイズがある場合は確認プロンプトを表示
   - `-f, --force`: 確認をスキップして上書き
-  - `--preview`: プレビュー環境のみにデプロイ（本番反映しない）
+  - `-p, --preview`: プレビュー環境のみにデプロイ（本番反映しない）
 - `kcdev build` - 本番用IIFEバンドルを`dist/`に生成（console.error以外のconsole.*とdebuggerは自動削除）
 - `kcdev deploy` - ビルド成果物をkintoneにAPI経由でデプロイ
   - 既存カスタマイズがある場合は確認プロンプトを表示
   - `-f, --force`: 確認をスキップして上書き
-  - `--preview`: プレビュー環境のみにデプロイ（本番反映しない）
+  - `-p, --preview`: プレビュー環境のみにデプロイ（本番反映しない）
 - `kcdev update` - Viteおよびフレームワークプラグインを最新版に更新
 
 ## 配布方式
@@ -79,7 +79,7 @@ Go本体 + npmラッパー（全プラットフォームのバイナリを1パ�
 バージョンは **Makefile の `VERSION` 変数で一元管理**される。
 
 ```makefile
-VERSION := 0.2.0
+VERSION := 0.2.1
 ```
 
 この値が以下に自動反映される:
