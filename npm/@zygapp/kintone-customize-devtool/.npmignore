@@ -1,0 +1,32 @@
+# Development files
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Test files
+__tests__/
+*.test.js
+*.spec.js
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Documentation (not needed in package)
+*.md
+!README.md
+
+# Binary path file (generated at install)
+bin/.binary-path

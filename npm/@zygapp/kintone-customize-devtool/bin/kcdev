@@ -1,0 +1,28 @@
+#!/usr/bin/env node
+
+const { execFileSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+const pathFile = path.join(__dirname, '.binary-path');
+
+if (!fs.existsSync(pathFile)) {
+  console.error('kcdev: binary not found. Try reinstalling the package.');
+  process.exit(1);
+}
+
+const binaryPath = fs.readFileSync(pathFile, 'utf8').trim();
+
+if (!fs.existsSync(binaryPath)) {
+  console.error(`kcdev: binary not found at ${binaryPath}`);
+  process.exit(1);
+}
+
+try {
+  execFileSync(binaryPath, process.argv.slice(2), { stdio: 'inherit' });
+} catch (err) {
+  if (err.status !== undefined) {
+    process.exit(err.status);
+  }
+  throw err;
+}

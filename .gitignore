@@ -1,0 +1,25 @@
+# シークレット
+.env
+
+# ビルド成果物
+build/
+dist/
+
+# npmパッケージ内のバイナリ
+npm/@zygapp/kintone-customize-devtool/bin/darwin-*/
+npm/@zygapp/kintone-customize-devtool/bin/linux-*/
+npm/@zygapp/kintone-customize-devtool/bin/win32-*/
+npm/@zygapp/kintone-customize-devtool/bin/.binary-path
+
+# テスト用プロジェクト
+my-kintone-app/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
