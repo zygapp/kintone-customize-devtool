@@ -145,6 +145,10 @@ export default defineConfig({
       },
     },
   },
+  esbuild: {
+    drop: ['debugger'],
+    pure: ['console.log', 'console.info', 'console.debug', 'console.warn', 'console.trace'],
+  },
 })
 `, imports, entry, getBuildPlugins(framework), plugins)
 }
