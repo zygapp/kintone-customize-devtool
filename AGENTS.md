@@ -68,6 +68,22 @@ Go本体 + npmラッパー（全プラットフォームのバイナリを1パ�
 3. devモードではローダーのみkintoneにデプロイ（ソースコードはVite dev serverから配信）
 4. deployはビルド成果物のみアップロード
 
+## バージョン管理
+
+バージョンは以下の3箇所で管理され、**すべて同じバージョンに統一する必要がある**:
+
+1. **Go CLI** - `internal/cmd/root.go` の `Version` 定数
+2. **npm パッケージ** - `npm/@zygapp/kintone-customize-devtool/package.json` の `version`
+3. **Git タグ** - `v0.x.x` 形式
+
+### リリース手順
+
+1. 上記3箇所のバージョンを更新
+2. コミット: `chore: バージョンを v0.x.x に更新`
+3. タグ追加: `git tag v0.x.x`
+4. ビルド: `make build-all`
+5. npm公開: `make npm-publish-token TOKEN=xxx`
+
 ## コミットポリシー
 
 ### コミットメッセージ形式
