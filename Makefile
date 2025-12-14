@@ -1,15 +1,20 @@
-.PHONY: build clean install test build-all npm-prepare npm-package npm-publish npm-publish-token npm-dry-run
+.PHONY: build clean install test build-all npm-prepare npm-package npm-publish npm-publish-token npm-dry-run version-sync
 
-VERSION := 0.1.0
+# ========================================
+# バージョン（ここを変更するだけで全体に反映）
+# ========================================
+VERSION := 0.1.1
+
 BINARY_NAME := kcdev
 BUILD_DIR := build
 NPM_DIR := npm/@zygapp/kintone-customize-devtool
+LDFLAGS := -s -w -X github.com/kintone/kcdev/internal/cmd.version=$(VERSION)
 
 build:
-	go build -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/kcdev
+	go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/kcdev
 
 install:
-	go install ./cmd/kcdev
+	go install -ldflags="$(LDFLAGS)" ./cmd/kcdev
 
 clean:
 	rm -rf $(BUILD_DIR)
@@ -22,21 +27,27 @@ clean:
 test:
 	go test ./...
 
+# package.json のバージョンを同期
+version-sync:
+	@echo "Syncing version to $(VERSION)..."
+	@sed -i 's/"version": "[^"]*"/"version": "$(VERSION)"/' $(NPM_DIR)/package.json
+	@echo "Done!"
+
 # 全プラットフォーム向けビルド
-build-all: clean
+build-all: clean version-sync
 	@mkdir -p $(BUILD_DIR)
 	@echo "Building darwin-x64..."
-	@GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-x64 ./cmd/kcdev
+	@GOOS=darwin GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-x64 ./cmd/kcdev
 	@echo "Building darwin-arm64..."
-	@GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 ./cmd/kcdev
+	@GOOS=darwin GOARCH=arm64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 ./cmd/kcdev
 	@echo "Building linux-x64..."
-	@GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-x64 ./cmd/kcdev
+	@GOOS=linux GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-x64 ./cmd/kcdev
 	@echo "Building linux-arm64..."
-	@GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 ./cmd/kcdev
+	@GOOS=linux GOARCH=arm64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 ./cmd/kcdev
 	@echo "Building win32-x64..."
-	@GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(BINARY_NAME)-win32-x64.exe ./cmd/kcdev
+	@GOOS=windows GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-win32-x64.exe ./cmd/kcdev
 	@echo "Building win32-arm64..."
-	@GOOS=windows GOARCH=arm64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(BINARY_NAME)-win32-arm64.exe ./cmd/kcdev
+	@GOOS=windows GOARCH=arm64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-win32-arm64.exe ./cmd/kcdev
 	@echo "Build complete!"
 
 # npmパッケージにバイナリをコピー

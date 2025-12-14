@@ -70,18 +70,22 @@ Go本体 + npmラッパー（全プラットフォームのバイナリを1パ�
 
 ## バージョン管理
 
-バージョンは以下の3箇所で管理され、**すべて同じバージョンに統一する必要がある**:
+バージョンは **Makefile の `VERSION` 変数で一元管理**される。
 
-1. **Go CLI** - `internal/cmd/root.go` の `Version` 定数
-2. **npm パッケージ** - `npm/@zygapp/kintone-customize-devtool/package.json` の `version`
-3. **Git タグ** - `v0.x.x` 形式
+```makefile
+VERSION := 0.1.1
+```
+
+この値が以下に自動反映される:
+- **Go CLI** - ビルド時に `-ldflags` で注入
+- **npm パッケージ** - `make build-all` 時に `package.json` を自動更新
 
 ### リリース手順
 
-1. 上記3箇所のバージョンを更新
-2. コミット: `chore: バージョンを v0.x.x に更新`
-3. タグ追加: `git tag v0.x.x`
-4. ビルド: `make build-all`
+1. `Makefile` の `VERSION` を更新
+2. ビルド: `make build-all`（package.json も自動更新される）
+3. コミット: `chore: バージョンを v0.x.x に更新`
+4. タグ追加: `git tag v0.x.x`
 5. npm公開: `make npm-publish-token TOKEN=xxx`
 
 ## コミットポリシー

@@ -4,7 +4,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const version = "0.1.1"
+// version はビルド時に -ldflags で注入される
+var version = "dev"
 
 var rootCmd = &cobra.Command{
 	Use:     "kcdev",
