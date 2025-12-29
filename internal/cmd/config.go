@@ -3,7 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/fatih/color"
@@ -76,6 +78,13 @@ func runConfig(cmd *cobra.Command, args []string) error {
 			if err := cfg.Save(cwd); err != nil {
 				return err
 			}
+		case "entry":
+			if err := editEntry(cwd, cfg); err != nil {
+				return err
+			}
+			if err := cfg.Save(cwd); err != nil {
+				return err
+			}
 		case "exit":
 			fmt.Println("\n設定を終了します。")
 			return nil
@@ -90,6 +99,7 @@ func askConfigAction() (string, error) {
 		"ターゲット（デスクトップ/モバイル）の設定",
 		"適用範囲の設定",
 		"出力ファイル名の設定",
+		"エントリーファイルの設定",
 		"終了",
 	}
 
@@ -113,6 +123,8 @@ func askConfigAction() (string, error) {
 		return "scope", nil
 	case options[4]:
 		return "output", nil
+	case options[5]:
+		return "entry", nil
 	default:
 		return "exit", nil
 	}
@@ -282,5 +294,61 @@ func editOutput(cfg *config.Config) error {
 	cfg.Output = output
 
 	fmt.Printf("\n%s 出力ファイル名を更新しました (%s.js / %s.css)\n", green("✓"), output, output)
+	return nil
+}
+
+func editEntry(projectDir string, cfg *config.Config) error {
+	green := color.New(color.FgGreen).SprintFunc()
+	yellow := color.New(color.FgYellow).SprintFunc()
+
+	fmt.Println()
+
+	// src/ 直下の js, ts, jsx, tsx ファイルを検索
+	srcDir := filepath.Join(projectDir, "src")
+	var entryFiles []string
+
+	entries, err := os.ReadDir(srcDir)
+	if err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			ext := strings.ToLower(filepath.Ext(entry.Name()))
+			if ext == ".js" || ext == ".ts" || ext == ".jsx" || ext == ".tsx" {
+				entryFiles = append(entryFiles, "/src/"+entry.Name())
+			}
+		}
+	}
+
+	if len(entryFiles) == 0 {
+		fmt.Printf("  %s src/ ディレクトリにエントリーファイルが見つかりません\n", yellow("⚠"))
+		fmt.Println("Enterキーで戻る...")
+		fmt.Scanln()
+		return nil
+	}
+
+	// 現在の設定を先頭に表示
+	currentEntry := cfg.Dev.Entry
+	defaultIndex := 0
+	for i, f := range entryFiles {
+		if f == currentEntry {
+			defaultIndex = i
+			break
+		}
+	}
+
+	var selected string
+	selectPrompt := &survey.Select{
+		Message: "エントリーファイルを選択:",
+		Options: entryFiles,
+		Default: entryFiles[defaultIndex],
+	}
+	if err := survey.AskOne(selectPrompt, &selected); err != nil {
+		return err
+	}
+
+	cfg.Dev.Entry = selected
+
+	fmt.Printf("\n%s エントリーファイルを更新しました (%s)\n", green("✓"), selected)
 	return nil
 }
