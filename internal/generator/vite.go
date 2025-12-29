@@ -33,6 +33,11 @@ const projectRoot = path.resolve(__dirname, '..')
 const certDir = path.resolve(__dirname, 'certs')
 const srcEntry = path.resolve(__dirname, '..%s')
 
+// config.json から出力ファイル名を取得
+const configPath = path.resolve(__dirname, 'config.json')
+const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+const outputName = config.output || 'customize'
+
 // プロジェクトルートにindex.htmlがあれば従来動作、なければ.kcdev/をroot
 const hasRootIndexHtml = fs.existsSync(path.join(projectRoot, 'index.html'))
 const viteRoot = hasRootIndexHtml ? projectRoot : __dirname
@@ -57,9 +62,9 @@ const kcdevPlugin = {
       next()
     })
 
-    // /customize.js - Vite でリアルタイムバンドル
+    // /${outputName}.js - Vite でリアルタイムバンドル
     server.middlewares.use(async (req, res, next) => {
-      if (!req.url?.startsWith('/customize.js')) {
+      if (!req.url?.startsWith('/' + outputName + '.js')) {
         return next()
       }
 
@@ -75,20 +80,20 @@ const kcdevPlugin = {
             write: false,
             lib: {
               entry: srcEntry,
-              name: 'customize',
+              name: outputName,
               formats: ['iife'],
-              fileName: () => 'customize.js',
+              fileName: () => outputName + '.js',
             },
             rollupOptions: {
               output: {
-                assetFileNames: 'customize.[ext]',
+                assetFileNames: outputName + '.[ext]',
               },
             },
           },
         })
 
         const output = Array.isArray(result) ? result[0] : result
-        const jsChunk = output.output.find((o: any) => o.fileName === 'customize.js')
+        const jsChunk = output.output.find((o: any) => o.fileName === outputName + '.js')
         const cssChunk = output.output.find((o: any) => o.fileName?.endsWith('.css'))
 
         if (jsChunk && 'code' in jsChunk) {
@@ -139,15 +144,15 @@ export default defineConfig({
   build: {
     lib: {
       entry: srcEntry,
-      name: 'customize',
+      name: outputName,
       formats: ['iife'],
-      fileName: () => 'customize.js',
+      fileName: () => outputName + '.js',
     },
     outDir: path.resolve(__dirname, '../dist'),
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        assetFileNames: 'customize.[ext]',
+        assetFileNames: outputName + '.[ext]',
       },
     },
   },

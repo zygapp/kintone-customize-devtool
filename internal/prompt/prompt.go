@@ -51,6 +51,7 @@ type InitAnswers struct {
 	TargetDesktop  bool
 	TargetMobile   bool
 	Scope          Scope
+	Output         string
 }
 
 func AskCreateDir() (bool, error) {
@@ -299,4 +300,17 @@ func AskScope(defaultScope Scope) (Scope, error) {
 		return ScopeNone, nil
 	}
 	return ScopeAll, nil
+}
+
+func AskOutput(defaultVal string) (string, error) {
+	var answer string
+	prompt := &survey.Input{
+		Message: "出力ファイル名 (拡張子なし):",
+		Default: defaultVal,
+		Help:    "ビルド時に生成されるファイル名を指定します (例: customize → customize.js, customize.css)",
+	}
+	if err := survey.AskOne(prompt, &answer, survey.WithValidator(survey.Required)); err != nil {
+		return "", err
+	}
+	return answer, nil
 }

@@ -58,8 +58,11 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	green := color.New(color.FgGreen).SprintFunc()
 	cyan := color.New(color.FgCyan).SprintFunc()
 
+	// 設定から出力ファイル名を取得
+	outputName := cfg.GetOutputName()
+
 	distDir := filepath.Join(projectDir, "dist")
-	jsPath := filepath.Join(distDir, "customize.js")
+	jsPath := filepath.Join(distDir, outputName+".js")
 
 	// dist/が存在する場合はビルド確認
 	if _, err := os.Stat(distDir); err == nil {
@@ -118,7 +121,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	// 既存カスタマイズの確認
 	if !forceOverwrite {
-		kcdevFiles := []string{"customize.js", "customize.css", "kintone-dev-loader.js"}
+		kcdevFiles := []string{outputName + ".js", outputName + ".css", "kintone-dev-loader.js"}
 		existing, err := client.GetExistingCustomizations(cfg.Kintone.AppID, kcdevFiles)
 		if err != nil {
 			yellow := color.New(color.FgYellow).SprintFunc()
@@ -159,7 +162,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	cssPath := filepath.Join(projectDir, "dist", "customize.css")
+	cssPath := filepath.Join(projectDir, "dist", outputName+".css")
 	hasCss := false
 	if _, err := os.Stat(cssPath); err == nil {
 		hasCss = true

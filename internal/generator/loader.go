@@ -58,7 +58,11 @@ func GenerateLoader(projectDir string, answers *prompt.InitAnswers) error {
 	}
 
 	entry := GetEntryPath(answers.Framework, answers.Language)
-	loaderContent := generateLoaderContent(entry)
+	outputName := answers.Output
+	if outputName == "" {
+		outputName = "customize"
+	}
+	loaderContent := generateLoaderContent(entry, outputName)
 	loaderPath := filepath.Join(managedDir, "kintone-dev-loader.js")
 
 	if err := os.WriteFile(loaderPath, []byte(loaderContent), 0644); err != nil {
@@ -101,7 +105,7 @@ func GenerateLoader(projectDir string, answers *prompt.InitAnswers) error {
 	return os.WriteFile(metaPath, metaData, 0644)
 }
 
-func generateLoaderContent(entry string) string {
+func generateLoaderContent(entry string, outputName string) string {
 	now := time.Now().Format(time.RFC3339)
 
 	return fmt.Sprintf(`// kcdev-loader
@@ -115,7 +119,7 @@ func generateLoaderContent(entry string) string {
 
   // 同期 XHR で IIFE バンドルを取得して実行
   const xhr = new XMLHttpRequest();
-  xhr.open("GET", origin + "/customize.js?t=" + t, false);
+  xhr.open("GET", origin + "/%s.js?t=" + t, false);
   xhr.send();
   if (xhr.status === 200) {
     eval(xhr.responseText);
@@ -124,7 +128,7 @@ func generateLoaderContent(entry string) string {
   // HMR: @vite/client を非同期で読み込んでリロード検知
   import(origin + "/@vite/client").catch(() => {});
 })();
-`, loaderSchemaVersion, now, devOrigin, devOrigin)
+`, loaderSchemaVersion, now, devOrigin, devOrigin, outputName)
 }
 
 func LoadLoaderMeta(projectDir string) (*LoaderMeta, error) {

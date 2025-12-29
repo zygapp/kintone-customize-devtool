@@ -93,12 +93,19 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("ビルドエラー: %w", err)
 	}
 
+	// 設定から出力ファイル名を取得
+	cfg, _ := config.Load(projectDir)
+	outputName := "customize"
+	if cfg != nil {
+		outputName = cfg.GetOutputName()
+	}
+
 	fmt.Printf("%s ビルド完了!\n", green("✓"))
 	fmt.Printf("出力ファイル:\n")
-	fmt.Printf("  dist/customize.js\n")
+	fmt.Printf("  dist/%s.js\n", outputName)
 
-	if _, err := os.Stat(filepath.Join(projectDir, "dist", "customize.css")); err == nil {
-		fmt.Printf("  dist/customize.css\n")
+	if _, err := os.Stat(filepath.Join(projectDir, "dist", outputName+".css")); err == nil {
+		fmt.Printf("  dist/%s.css\n", outputName)
 	}
 
 	fmt.Println()

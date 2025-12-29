@@ -27,6 +27,7 @@ var (
 	flagMobile         bool
 	flagPackageManager string
 	flagScope          string
+	flagOutput         string
 )
 
 var initCmd = &cobra.Command{
@@ -50,6 +51,7 @@ func init() {
 	initCmd.Flags().BoolVar(&flagMobile, "mobile", false, "モバイルを対象に含める")
 	initCmd.Flags().StringVarP(&flagPackageManager, "package-manager", "m", "", "パッケージマネージャー (npm|pnpm|yarn|bun)")
 	initCmd.Flags().StringVarP(&flagScope, "scope", "s", "", "適用範囲 (all|admin|none)")
+	initCmd.Flags().StringVarP(&flagOutput, "output", "o", "", "出力ファイル名 (拡張子なし、デフォルト: プロジェクト名)")
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
@@ -137,7 +139,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 			Desktop: answers.TargetDesktop,
 			Mobile:  answers.TargetMobile,
 		},
-		Scope: string(answers.Scope),
+		Scope:  string(answers.Scope),
+		Output: answers.Output,
 	}
 	if err := cfg.Save(projectDir); err != nil {
 		return fmt.Errorf("設定保存エラー: %w", err)
@@ -380,6 +383,22 @@ func collectAnswers(projectDir string, projectName string) (*prompt.InitAnswers,
 			return nil, err
 		}
 		answers.Scope = scope
+	}
+
+	// 出力ファイル名
+	if flagOutput != "" {
+		answers.Output = flagOutput
+	} else {
+		// デフォルトはプロジェクト名
+		defaultOutput := answers.ProjectName
+		if cfg, err := config.Load(projectDir); err == nil && cfg.Output != "" {
+			defaultOutput = cfg.Output
+		}
+		output, err := prompt.AskOutput(defaultOutput)
+		if err != nil {
+			return nil, err
+		}
+		answers.Output = output
 	}
 
 	return answers, nil

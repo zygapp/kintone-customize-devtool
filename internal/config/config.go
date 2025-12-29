@@ -16,6 +16,7 @@ type Config struct {
 	Dev     DevConfig     `json:"dev"`
 	Targets TargetsConfig `json:"targets"`
 	Scope   string        `json:"scope"`
+	Output  string        `json:"output,omitempty"`
 }
 
 type TargetsConfig struct {
@@ -97,4 +98,13 @@ func (c *Config) Save(projectDir string) error {
 func Exists(projectDir string) bool {
 	_, err := os.Stat(ConfigPath(projectDir))
 	return err == nil
+}
+
+// GetOutputName returns the output file name (without extension)
+// If not set, returns "customize" as default
+func (c *Config) GetOutputName() string {
+	if c.Output == "" {
+		return "customize"
+	}
+	return c.Output
 }
