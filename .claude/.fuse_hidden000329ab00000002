@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sudo apt update:*)",
+      "Bash(sudo apt install:*)",
+      "Bash(go build:*)",
+      "Bash(./build/kcdev:*)",
+      "Bash(npm publish:*)",
+      "Bash(npm unpublish:*)"
+    ]
+  }
+}
