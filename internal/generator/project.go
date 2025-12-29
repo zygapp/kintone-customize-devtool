@@ -103,7 +103,8 @@ func generateIndexHTML(projectDir string, answers *prompt.InitAnswers) error {
 </html>
 `, appURL, appURL)
 
-	return os.WriteFile(filepath.Join(projectDir, "index.html"), []byte(content), 0644)
+	kcdevDir := filepath.Join(projectDir, ".kcdev")
+	return os.WriteFile(filepath.Join(kcdevDir, "index.html"), []byte(content), 0644)
 }
 
 func getLanguageShort(lang prompt.Language) string {

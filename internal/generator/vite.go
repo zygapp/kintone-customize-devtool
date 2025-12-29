@@ -29,8 +29,13 @@ func generateViteConfigContent(framework prompt.Framework, language prompt.Langu
 import fs from 'fs'
 import path from 'path'
 
+const projectRoot = path.resolve(__dirname, '..')
 const certDir = path.resolve(__dirname, 'certs')
 const srcEntry = path.resolve(__dirname, '..%s')
+
+// プロジェクトルートにindex.htmlがあれば従来動作、なければ.kcdev/をroot
+const hasRootIndexHtml = fs.existsSync(path.join(projectRoot, 'index.html'))
+const viteRoot = hasRootIndexHtml ? projectRoot : __dirname
 
 let cachedBundle: string | null = null
 
@@ -117,6 +122,7 @@ const kcdevPlugin = {
 }
 
 export default defineConfig({
+  root: viteRoot,
   plugins: [%skcdevPlugin],
   server: {
     https: {
