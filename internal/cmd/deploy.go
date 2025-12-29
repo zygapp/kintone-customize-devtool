@@ -53,13 +53,43 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("認証情報が見つかりません。.env または .kcdev/config.json に設定してください")
 	}
 
-	jsPath := filepath.Join(projectDir, "dist", "customize.js")
-	if _, err := os.Stat(jsPath); err != nil {
-		return fmt.Errorf("ビルド成果物が見つかりません。先に kcdev build を実行してください")
-	}
-
 	green := color.New(color.FgGreen).SprintFunc()
 	cyan := color.New(color.FgCyan).SprintFunc()
+
+	distDir := filepath.Join(projectDir, "dist")
+	jsPath := filepath.Join(distDir, "customize.js")
+
+	// dist/が存在する場合はビルド確認
+	if _, err := os.Stat(distDir); err == nil {
+		// dist/が存在する場合、再ビルドするか確認
+		var rebuild bool
+		prompt := &survey.Confirm{
+			Message: "dist/ が存在します。再ビルドしますか?",
+			Default: true,
+		}
+		if err := survey.AskOne(prompt, &rebuild); err != nil {
+			return fmt.Errorf("キャンセルされました")
+		}
+		if rebuild {
+			fmt.Printf("\n%s ビルドを開始...\n", cyan("→"))
+			if err := runBuild(nil, nil); err != nil {
+				return fmt.Errorf("ビルドエラー: %w", err)
+			}
+			fmt.Println()
+		}
+	} else {
+		// dist/が存在しない場合は自動でビルド
+		fmt.Printf("\n%s dist/ が見つかりません。ビルドを開始...\n", cyan("→"))
+		if err := runBuild(nil, nil); err != nil {
+			return fmt.Errorf("ビルドエラー: %w", err)
+		}
+		fmt.Println()
+	}
+
+	// ビルド成果物の確認
+	if _, err := os.Stat(jsPath); err != nil {
+		return fmt.Errorf("ビルド成果物が見つかりません")
+	}
 
 	// ターゲット表示用の文字列を生成
 	var targets []string
