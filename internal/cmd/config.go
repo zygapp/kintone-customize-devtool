@@ -69,6 +69,13 @@ func runConfig(cmd *cobra.Command, args []string) error {
 			if err := cfg.Save(cwd); err != nil {
 				return err
 			}
+		case "output":
+			if err := editOutput(cfg); err != nil {
+				return err
+			}
+			if err := cfg.Save(cwd); err != nil {
+				return err
+			}
 		case "exit":
 			fmt.Println("\n設定を終了します。")
 			return nil
@@ -82,6 +89,7 @@ func askConfigAction() (string, error) {
 		"kintone接続設定 (ドメイン、アプリID、認証)",
 		"ターゲット (desktop/mobile) の設定",
 		"適用範囲 (scope) の設定",
+		"出力ファイル名の設定",
 		"終了",
 	}
 
@@ -103,6 +111,8 @@ func askConfigAction() (string, error) {
 		return "targets", nil
 	case options[3]:
 		return "scope", nil
+	case options[4]:
+		return "output", nil
 	default:
 		return "exit", nil
 	}
@@ -151,6 +161,10 @@ func showCurrentConfig(cfg *config.Config) {
 	default:
 		fmt.Printf("  %s すべてのユーザー (ALL)\n", green("✓"))
 	}
+
+	// 出力ファイル名
+	fmt.Printf("\n%s\n", cyan("出力:"))
+	fmt.Printf("  ファイル名: %s.js / %s.css\n", cfg.GetOutputName(), cfg.GetOutputName())
 
 	// Dev設定
 	fmt.Printf("\n%s\n", cyan("開発サーバー:"))
@@ -252,5 +266,21 @@ func editScope(cfg *config.Config) error {
 	cfg.Scope = string(scope)
 
 	fmt.Printf("\n%s 適用範囲を更新しました\n", green("✓"))
+	return nil
+}
+
+func editOutput(cfg *config.Config) error {
+	green := color.New(color.FgGreen).SprintFunc()
+
+	fmt.Println()
+
+	output, err := prompt.AskOutput(cfg.GetOutputName())
+	if err != nil {
+		return err
+	}
+
+	cfg.Output = output
+
+	fmt.Printf("\n%s 出力ファイル名を更新しました (%s.js / %s.css)\n", green("✓"), output, output)
 	return nil
 }
