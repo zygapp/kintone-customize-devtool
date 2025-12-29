@@ -7,10 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/fatih/color"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/kintone/kcdev/internal/config"
 	"github.com/kintone/kcdev/internal/generator"
 	"github.com/kintone/kcdev/internal/prompt"
+	"github.com/kintone/kcdev/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -80,47 +81,50 @@ func runInit(cmd *cobra.Command, args []string) error {
 		projectDir = cwd
 	}
 
-	green := color.New(color.FgGreen).SprintFunc()
-	cyan := color.New(color.FgCyan).SprintFunc()
-
 	// 既存プロジェクトかどうか判定
 	isExisting := false
 	if _, err := os.Stat(filepath.Join(projectDir, "package.json")); err == nil {
 		isExisting = true
 	}
 
+	fmt.Println()
 	if isExisting {
-		fmt.Printf("\n%s 既存プロジェクトを再初期化中...\n", cyan("→"))
+		ui.Info("既存プロジェクトを再初期化中...")
 	} else {
-		fmt.Printf("\n%s プロジェクトを作成中...\n", cyan("→"))
-		fmt.Printf("  テンプレート...")
-		if err := generator.GenerateProject(projectDir, answers); err != nil {
-			fmt.Println()
+		ui.Info("プロジェクトを作成中...")
+
+		err = ui.SpinnerWithResult("テンプレートを生成中...", func() error {
+			return generator.GenerateProject(projectDir, answers)
+		})
+		if err != nil {
 			return fmt.Errorf("プロジェクト生成エラー: %w", err)
 		}
-		fmt.Printf(" %s\n", green("✓"))
+		ui.Success("テンプレートを生成しました")
 	}
 
-	fmt.Printf("  Vite設定...")
-	if err := generator.GenerateViteConfig(projectDir, answers.Framework, answers.Language); err != nil {
-		fmt.Println()
+	err = ui.SpinnerWithResult("Vite設定を生成中...", func() error {
+		return generator.GenerateViteConfig(projectDir, answers.Framework, answers.Language)
+	})
+	if err != nil {
 		return fmt.Errorf("Vite設定生成エラー: %w", err)
 	}
-	fmt.Printf(" %s\n", green("✓"))
+	ui.Success("Vite設定を生成しました")
 
-	fmt.Printf("  ローダー...")
-	if err := generator.GenerateLoader(projectDir, answers); err != nil {
-		fmt.Println()
+	err = ui.SpinnerWithResult("ローダーを生成中...", func() error {
+		return generator.GenerateLoader(projectDir, answers)
+	})
+	if err != nil {
 		return fmt.Errorf("ローダー生成エラー: %w", err)
 	}
-	fmt.Printf(" %s\n", green("✓"))
+	ui.Success("ローダーを生成しました")
 
-	fmt.Printf("  証明書...")
-	if err := generator.GenerateCerts(projectDir); err != nil {
-		fmt.Println()
+	err = ui.SpinnerWithResult("証明書を生成中...", func() error {
+		return generator.GenerateCerts(projectDir)
+	})
+	if err != nil {
 		return fmt.Errorf("証明書生成エラー: %w", err)
 	}
-	fmt.Printf(" %s\n", green("✓"))
+	ui.Success("証明書を生成しました")
 
 	cfg := &config.Config{
 		Kintone: config.KintoneConfig{
@@ -148,24 +152,44 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// 新規プロジェクトの場合、パッケージをインストール
 	if !isExisting && answers.PackageManager != "" {
-		fmt.Printf("\n%s パッケージをインストール中... (%s)\n", cyan("→"), answers.PackageManager)
+		fmt.Println()
+		ui.Info(fmt.Sprintf("パッケージをインストール中... (%s)", answers.PackageManager))
 
-		installCmd := exec.Command(string(answers.PackageManager), "install")
-		installCmd.Dir = projectDir
-		installCmd.Stdout = os.Stdout
-		installCmd.Stderr = os.Stderr
+		deps, devDeps := generator.GetPackageList(answers.Framework, answers.Language)
+		pm := string(answers.PackageManager)
 
-		if err := installCmd.Run(); err != nil {
-			return fmt.Errorf("インストールエラー: %w", err)
+		// dependencies をインストール
+		if len(deps) > 0 {
+			args := append([]string{"install"}, deps...)
+			installCmd := exec.Command(pm, args...)
+			installCmd.Dir = projectDir
+			installCmd.Stdout = os.Stdout
+			installCmd.Stderr = os.Stderr
+			if err := installCmd.Run(); err != nil {
+				return fmt.Errorf("依存パッケージインストールエラー: %w", err)
+			}
+		}
+
+		// devDependencies をインストール
+		if len(devDeps) > 0 {
+			args := append([]string{"install", "-D"}, devDeps...)
+			installCmd := exec.Command(pm, args...)
+			installCmd.Dir = projectDir
+			installCmd.Stdout = os.Stdout
+			installCmd.Stderr = os.Stderr
+			if err := installCmd.Run(); err != nil {
+				return fmt.Errorf("開発パッケージインストールエラー: %w", err)
+			}
 		}
 
 		// TypeScript の場合、型定義を生成
 		if answers.Language == prompt.LanguageTypeScript {
 			if err := generateTypes(projectDir, cfg, answers.Username, answers.Password); err != nil {
 				// 型定義生成の失敗は警告のみ（プロジェクト作成は成功として扱う）
-				yellow := color.New(color.FgYellow).SprintFunc()
-				fmt.Printf("\n%s 型定義の生成をスキップしました: %v\n", yellow("⚠"), err)
-				fmt.Printf("  後で %s を実行して型定義を生成できます\n", cyan("kcdev types"))
+				fmt.Println()
+				ui.Warn(fmt.Sprintf("型定義の生成をスキップしました: %v", err))
+				infoStyle := lipgloss.NewStyle().Foreground(ui.ColorCyan)
+				fmt.Printf("  後で %s を実行して型定義を生成できます\n", infoStyle.Render("kcdev types"))
 			}
 		}
 	}
@@ -446,20 +470,22 @@ func detectFromPackageJSON(projectDir string) (prompt.Framework, prompt.Language
 }
 
 func printSuccess(projectDir string, answers *prompt.InitAnswers, isExisting bool) {
-	green := color.New(color.FgGreen).SprintFunc()
-	cyan := color.New(color.FgCyan).SprintFunc()
+	infoStyle := lipgloss.NewStyle().Foreground(ui.ColorCyan)
 
+	fmt.Println()
 	if isExisting {
-		fmt.Printf("%s プロジェクトを再初期化しました!\n\n", green("✓"))
-		fmt.Printf("次のステップ:\n")
-		fmt.Printf("  %s\n", cyan("kcdev dev"))
+		ui.Success("プロジェクトを再初期化しました!")
+		fmt.Println()
+		fmt.Println("次のステップ:")
+		fmt.Printf("  %s\n", infoStyle.Render("kcdev dev"))
 	} else {
-		fmt.Printf("%s プロジェクトが作成されました!\n\n", green("✓"))
-		fmt.Printf("次のステップ:\n")
+		ui.Success("プロジェクトが作成されました!")
+		fmt.Println()
+		fmt.Println("次のステップ:")
 		if answers.CreateDir {
-			fmt.Printf("  %s %s\n", cyan("cd"), answers.ProjectName)
+			fmt.Printf("  %s %s\n", infoStyle.Render("cd"), answers.ProjectName)
 		}
-		fmt.Printf("  %s\n", cyan("kcdev dev"))
+		fmt.Printf("  %s\n", infoStyle.Render("kcdev dev"))
 	}
 	fmt.Println()
 }

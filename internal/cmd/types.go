@@ -6,8 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/fatih/color"
 	"github.com/kintone/kcdev/internal/config"
+	"github.com/kintone/kcdev/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -47,10 +47,8 @@ func runTypes(cmd *cobra.Command, args []string) error {
 }
 
 func generateTypes(projectDir string, cfg *config.Config, username, password string) error {
-	cyan := color.New(color.FgCyan).SprintFunc()
-	green := color.New(color.FgGreen).SprintFunc()
-
-	fmt.Printf("\n%s 型定義を生成中...\n", cyan("→"))
+	fmt.Println()
+	ui.Info("型定義を生成中...")
 
 	// 出力ディレクトリを作成
 	typesDir := filepath.Join(projectDir, "src", "types")
@@ -74,6 +72,8 @@ func generateTypes(projectDir string, cfg *config.Config, username, password str
 		return fmt.Errorf("dts-gen 実行エラー: %w", err)
 	}
 
-	fmt.Printf("\n%s 型定義を生成しました: src/types/kintone.d.ts\n\n", green("✓"))
+	fmt.Println()
+	ui.Success("型定義を生成しました: src/types/kintone.d.ts")
+	fmt.Println()
 	return nil
 }

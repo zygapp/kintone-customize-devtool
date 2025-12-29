@@ -11,11 +11,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/AlecAivazis/survey/v2"
-	"github.com/fatih/color"
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/kintone/kcdev/internal/config"
 	"github.com/kintone/kcdev/internal/generator"
 	"github.com/kintone/kcdev/internal/kintone"
+	"github.com/kintone/kcdev/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -128,13 +129,13 @@ func openBrowser(url string) error {
 }
 
 func deployLoader(projectDir string, cfg *config.Config, username, password string, force bool, previewOnly bool) error {
-	green := color.New(color.FgGreen).SprintFunc()
-	cyan := color.New(color.FgCyan).SprintFunc()
+	successStyle := lipgloss.NewStyle().Foreground(ui.ColorGreen)
 
+	fmt.Println()
 	if previewOnly {
-		fmt.Printf("\n%s ローダーをkintoneプレビュー環境にデプロイ中...\n", cyan("→"))
+		ui.Info("ローダーをkintoneプレビュー環境にデプロイ中...")
 	} else {
-		fmt.Printf("\n%s ローダーをkintoneにデプロイ中...\n", cyan("→"))
+		ui.Info("ローダーをkintoneにデプロイ中...")
 	}
 
 	client := kintone.NewClient(cfg.Kintone.Domain, username, password)
@@ -145,11 +146,10 @@ func deployLoader(projectDir string, cfg *config.Config, username, password stri
 		kcdevFiles := []string{"customize.js", "customize.css", "kintone-dev-loader.js"}
 		existing, err := client.GetExistingCustomizations(cfg.Kintone.AppID, kcdevFiles)
 		if err != nil {
-			yellow := color.New(color.FgYellow).SprintFunc()
-			fmt.Printf("  %s 既存カスタマイズの確認をスキップ: %v\n", yellow("⚠"), err)
+			ui.Warn(fmt.Sprintf("既存カスタマイズの確認をスキップ: %v", err))
 		} else if existing.HasExisting() {
-			yellow := color.New(color.FgYellow).SprintFunc()
-			fmt.Printf("\n  %s 既存のカスタマイズが検出されました:\n", yellow("⚠"))
+			fmt.Println()
+			ui.Warn("既存のカスタマイズが検出されました:")
 
 			// 詳細を表示
 			if len(existing.Desktop.JS) > 0 {
@@ -168,11 +168,16 @@ func deployLoader(projectDir string, cfg *config.Config, username, password stri
 			fmt.Println()
 
 			var confirm bool
-			prompt := &survey.Confirm{
-				Message: "これらのカスタマイズは上書きされます。続行しますか?",
-				Default: false,
-			}
-			if err := survey.AskOne(prompt, &confirm); err != nil {
+			err := ui.NewForm(
+				huh.NewGroup(
+					huh.NewConfirm().
+						Title("これらのカスタマイズは上書きされます。続行しますか?").
+						Affirmative("はい").
+						Negative("いいえ").
+						Value(&confirm),
+				),
+			).Run()
+			if err != nil {
 				return fmt.Errorf("キャンセルされました")
 			}
 			if !confirm {
@@ -194,7 +199,7 @@ func deployLoader(projectDir string, cfg *config.Config, username, password stri
 			fmt.Println()
 			return fmt.Errorf("ローダーアップロードエラー: %w", err)
 		}
-		fmt.Printf(" %s\n", green("✓"))
+		fmt.Printf(" %s\n", successStyle.Render("✓"))
 		desktopFiles = &kintone.CustomizeFiles{JSFileKey: fileKey}
 	}
 
@@ -206,7 +211,7 @@ func deployLoader(projectDir string, cfg *config.Config, username, password stri
 			fmt.Println()
 			return fmt.Errorf("ローダーアップロードエラー: %w", err)
 		}
-		fmt.Printf(" %s\n", green("✓"))
+		fmt.Printf(" %s\n", successStyle.Render("✓"))
 		mobileFiles = &kintone.CustomizeFiles{JSFileKey: fileKey}
 	}
 
@@ -220,7 +225,7 @@ func deployLoader(projectDir string, cfg *config.Config, username, password stri
 		fmt.Println()
 		return fmt.Errorf("カスタマイズ設定エラー: %w", err)
 	}
-	fmt.Printf(" %s\n", green("✓"))
+	fmt.Printf(" %s\n", successStyle.Render("✓"))
 
 	// アプリをデプロイ（プレビューのみの場合はスキップ）
 	if !previewOnly {
@@ -234,19 +239,18 @@ func deployLoader(projectDir string, cfg *config.Config, username, password stri
 			fmt.Println()
 			return fmt.Errorf("デプロイ待機エラー: %w", err)
 		}
-		fmt.Printf(" %s\n", green("✓"))
+		fmt.Printf(" %s\n", successStyle.Render("✓"))
 	} else {
-		yellow := color.New(color.FgYellow).SprintFunc()
-		fmt.Printf("  %s プレビュー環境のみに適用（本番反映はスキップ）\n", yellow("⚠"))
+		ui.Warn("プレビュー環境のみに適用（本番反映はスキップ）")
 	}
 
 	return nil
 }
 
 func printDevInfo(cfg *config.Config) {
-	cyan := color.New(color.FgCyan).SprintFunc()
-	green := color.New(color.FgGreen).SprintFunc()
-	yellow := color.New(color.FgYellow).SprintFunc()
+	successStyle := lipgloss.NewStyle().Foreground(ui.ColorGreen)
+	infoStyle := lipgloss.NewStyle().Foreground(ui.ColorCyan)
+	warnStyle := lipgloss.NewStyle().Foreground(ui.ColorYellow)
 
 	// ターゲット表示用の文字列を生成
 	var targets []string
@@ -260,15 +264,16 @@ func printDevInfo(cfg *config.Config) {
 		targets = append(targets, "デスクトップ") // デフォルト
 	}
 
-	fmt.Printf("\n%s 開発サーバーを起動中...\n", cyan("→"))
-	fmt.Printf("  %s  %s\n", green("➜"), cfg.Dev.Origin)
-	fmt.Printf("  %s     %s\n", cyan("エントリー:"), cfg.Dev.Entry)
-	fmt.Printf("  %s     %s\n", cyan("ターゲット:"), strings.Join(targets, ", "))
+	fmt.Println()
+	ui.Info("開発サーバーを起動中...")
+	fmt.Printf("  %s  %s\n", successStyle.Render("➜"), cfg.Dev.Origin)
+	fmt.Printf("  %s     %s\n", infoStyle.Render("エントリー:"), cfg.Dev.Entry)
+	fmt.Printf("  %s     %s\n", infoStyle.Render("ターゲット:"), strings.Join(targets, ", "))
 
 	ok, msg, _ := generator.VerifyLoader(".")
 	if ok {
-		fmt.Printf("  %s       %s\n\n", green("ローダー:"), msg)
+		fmt.Printf("  %s       %s\n\n", successStyle.Render("ローダー:"), msg)
 	} else {
-		fmt.Printf("  %s       %s\n\n", yellow("ローダー:"), msg)
+		fmt.Printf("  %s       %s\n\n", warnStyle.Render("ローダー:"), msg)
 	}
 }

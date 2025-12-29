@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,11 +10,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/AlecAivazis/survey/v2"
-	"github.com/fatih/color"
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/kintone/kcdev/internal/config"
+	"github.com/kintone/kcdev/internal/ui"
 	"github.com/spf13/cobra"
 )
+
+var errVersionRequired = errors.New("入力必須です")
 
 var (
 	noMinify    bool
@@ -42,9 +46,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("設定ファイルが見つかりません。kcdev init を実行してください: %w", err)
 	}
 
-	green := color.New(color.FgGreen).SprintFunc()
-	cyan := color.New(color.FgCyan).SprintFunc()
-	yellow := color.New(color.FgYellow).SprintFunc()
+	infoStyle := lipgloss.NewStyle().Foreground(ui.ColorCyan)
 
 	// バージョン確認（スキップフラグがない場合）
 	if !skipVersion {
@@ -65,18 +67,19 @@ func runBuild(cmd *cobra.Command, args []string) error {
 			if err := savePackageJSON(projectDir, pkg); err != nil {
 				return fmt.Errorf("package.json の保存に失敗しました: %w", err)
 			}
-			fmt.Printf("%s バージョンを更新: %s → %s\n", green("✓"), currentVersion, newVersion)
+			ui.Success(fmt.Sprintf("バージョンを更新: %s → %s", currentVersion, newVersion))
 		}
 	}
 
-	fmt.Printf("\n%s ビルドを開始...\n", cyan("→"))
+	fmt.Println()
+	ui.Info("ビルドを開始...")
 
 	viteConfig := filepath.Join(projectDir, config.ConfigDir, "vite.config.ts")
 	if _, err := os.Stat(filepath.Join(projectDir, "vite.config.ts")); err == nil {
 		viteConfig = filepath.Join(projectDir, "vite.config.ts")
 	}
 
-	fmt.Printf("%s バンドル中...\n", yellow("○"))
+	fmt.Printf("%s バンドル中...\n", infoStyle.Render("○"))
 
 	viteArgs := []string{"vite", "build", "--config", viteConfig, "--logLevel", "silent"}
 	if noMinify {
@@ -100,8 +103,8 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		outputName = cfg.GetOutputName()
 	}
 
-	fmt.Printf("%s ビルド完了!\n", green("✓"))
-	fmt.Printf("出力ファイル:\n")
+	ui.Success("ビルド完了!")
+	fmt.Println("出力ファイル:")
 	fmt.Printf("  dist/%s.js\n", outputName)
 
 	if _, err := os.Stat(filepath.Join(projectDir, "dist", outputName+".css")); err == nil {
@@ -136,17 +139,22 @@ func savePackageJSON(projectDir string, pkg map[string]interface{}) error {
 }
 
 func askVersionUpdate(currentVersion string) (string, error) {
-	cyan := color.New(color.FgCyan).SprintFunc()
+	infoStyle := lipgloss.NewStyle().Foreground(ui.ColorCyan)
 
-	fmt.Printf("現在のバージョン: %s\n", cyan(currentVersion))
+	fmt.Printf("現在のバージョン: %s\n", infoStyle.Render(currentVersion))
 
 	// まずバージョンを更新するか確認
 	var updateVersion bool
-	confirmPrompt := &survey.Confirm{
-		Message: "バージョンを更新しますか?",
-		Default: false,
-	}
-	if err := survey.AskOne(confirmPrompt, &updateVersion); err != nil {
+	err := ui.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("バージョンを更新しますか?").
+				Affirmative("はい").
+				Negative("いいえ").
+				Value(&updateVersion),
+		),
+	).Run()
+	if err != nil {
 		return "", err
 	}
 
@@ -172,39 +180,53 @@ func askVersionUpdate(currentVersion string) (string, error) {
 	minorVersion := fmt.Sprintf("%d.%d.%d", major, minor+1, 0)
 	majorVersion := fmt.Sprintf("%d.%d.%d", major+1, 0, 0)
 
-	options := []string{
-		fmt.Sprintf("パッチ更新 (%s)", patchVersion),
-		fmt.Sprintf("マイナー更新 (%s)", minorVersion),
-		fmt.Sprintf("メジャー更新 (%s)", majorVersion),
-		"カスタム入力",
-	}
-
 	var answer string
-	prompt := &survey.Select{
-		Message: "バージョンを選択:",
-		Options: options,
-		Default: options[0],
-	}
-	if err := survey.AskOne(prompt, &answer); err != nil {
+	err = ui.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("バージョンを選択").
+				Options(
+					huh.NewOption(fmt.Sprintf("パッチ更新 (%s)", patchVersion), "patch"),
+					huh.NewOption(fmt.Sprintf("マイナー更新 (%s)", minorVersion), "minor"),
+					huh.NewOption(fmt.Sprintf("メジャー更新 (%s)", majorVersion), "major"),
+					huh.NewOption("カスタム入力", "custom"),
+				).
+				Value(&answer),
+		),
+	).Run()
+	if err != nil {
 		return "", err
 	}
 
 	switch answer {
-	case options[0]:
+	case "patch":
 		return patchVersion, nil
-	case options[1]:
+	case "minor":
 		return minorVersion, nil
-	case options[2]:
+	case "major":
 		return majorVersion, nil
 	default:
 		// カスタム入力
 		var customVersion string
-		inputPrompt := &survey.Input{
-			Message: "バージョンを入力:",
-			Default: patchVersion,
-		}
-		if err := survey.AskOne(inputPrompt, &customVersion, survey.WithValidator(survey.Required)); err != nil {
+		err := ui.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("バージョンを入力").
+					Value(&customVersion).
+					Placeholder(patchVersion).
+					Validate(func(s string) error {
+						if s == "" {
+							return errVersionRequired
+						}
+						return nil
+					}),
+			),
+		).Run()
+		if err != nil {
 			return "", err
+		}
+		if customVersion == "" {
+			customVersion = patchVersion
 		}
 		return customVersion, nil
 	}

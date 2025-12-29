@@ -1,19 +1,18 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 
-	"github.com/AlecAivazis/survey/v2"
-	"github.com/fatih/color"
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/kintone/kcdev/internal/config"
 	"github.com/kintone/kcdev/internal/generator"
 	"github.com/kintone/kcdev/internal/prompt"
+	"github.com/kintone/kcdev/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -39,11 +38,10 @@ func runConfig(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("設定ファイルが見つかりません。先に kcdev init を実行してください: %w", err)
 	}
 
-	cyan := color.New(color.FgCyan).SprintFunc()
-
 	for {
 		fmt.Print("\033[H\033[2J")
-		fmt.Printf("%s 設定メニュー\n\n", cyan("⚙"))
+		ui.Title("設定メニュー")
+		fmt.Println()
 
 		action, err := askConfigAction()
 		if err != nil {
@@ -103,98 +101,89 @@ func runConfig(cmd *cobra.Command, args []string) error {
 }
 
 func askConfigAction() (string, error) {
-	options := []string{
-		"現在の設定を表示",
-		"kintone接続設定（ドメイン、アプリID、認証）",
-		"ターゲット（デスクトップ/モバイル）の設定",
-		"適用範囲の設定",
-		"出力ファイル名の設定",
-		"エントリーファイルの設定",
-		"フレームワークの変更",
-		"終了",
-	}
-
 	var answer string
-	prompt := &survey.Select{
-		Message: "操作を選択してください:",
-		Options: options,
-	}
-	if err := survey.AskOne(prompt, &answer); err != nil {
+	err := ui.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("操作を選択してください").
+				Options(
+					huh.NewOption("現在の設定を表示", "view"),
+					huh.NewOption("kintone接続設定（ドメイン、アプリID、認証）", "kintone"),
+					huh.NewOption("ターゲット（デスクトップ/モバイル）の設定", "targets"),
+					huh.NewOption("適用範囲の設定", "scope"),
+					huh.NewOption("出力ファイル名の設定", "output"),
+					huh.NewOption("エントリーファイルの設定", "entry"),
+					huh.NewOption("フレームワークの変更", "framework"),
+					huh.NewOption("終了", "exit"),
+				).
+				Value(&answer),
+		),
+	).Run()
+	if err != nil {
 		return "", err
 	}
-
-	switch answer {
-	case options[0]:
-		return "view", nil
-	case options[1]:
-		return "kintone", nil
-	case options[2]:
-		return "targets", nil
-	case options[3]:
-		return "scope", nil
-	case options[4]:
-		return "output", nil
-	case options[5]:
-		return "entry", nil
-	case options[6]:
-		return "framework", nil
-	default:
-		return "exit", nil
-	}
+	return answer, nil
 }
 
 func showCurrentConfig(cfg *config.Config) {
-	cyan := color.New(color.FgCyan).SprintFunc()
-	green := color.New(color.FgGreen).SprintFunc()
-	yellow := color.New(color.FgYellow).SprintFunc()
+	fmt.Println()
+	ui.Title("現在の設定")
+	fmt.Println()
 
-	fmt.Printf("\n%s 現在の設定\n\n", cyan("📋"))
+	successStyle := lipgloss.NewStyle().Foreground(ui.ColorGreen)
+	warnStyle := lipgloss.NewStyle().Foreground(ui.ColorYellow)
+	errorStyle := lipgloss.NewStyle().Foreground(ui.ColorRed)
+	infoStyle := lipgloss.NewStyle().Foreground(ui.ColorCyan)
 
 	// kintone設定
-	fmt.Printf("%s\n", cyan("kintone:"))
-	fmt.Printf("  ドメイン: %s\n", cfg.Kintone.Domain)
-	fmt.Printf("  アプリID: %d\n", cfg.Kintone.AppID)
+	fmt.Println(infoStyle.Render("kintone:"))
+	fmt.Printf("  ドメイン:   %s\n", cfg.Kintone.Domain)
+	fmt.Printf("  アプリID:   %d\n", cfg.Kintone.AppID)
 	if cfg.Kintone.Auth.Username != "" {
-		fmt.Printf("  ユーザー: %s\n", cfg.Kintone.Auth.Username)
+		fmt.Printf("  ユーザー:   %s\n", cfg.Kintone.Auth.Username)
 		fmt.Printf("  パスワード: %s\n", "********")
 	} else {
-		fmt.Printf("  認証: %s\n", yellow("未設定"))
+		fmt.Printf("  認証:       %s\n", warnStyle.Render("未設定"))
 	}
 
 	// ターゲット
-	fmt.Printf("\n%s\n", cyan("ターゲット:"))
+	fmt.Println()
+	fmt.Println(infoStyle.Render("ターゲット:"))
 	if cfg.Targets.Desktop {
-		fmt.Printf("  %s デスクトップ\n", green("✓"))
+		fmt.Printf("  %s デスクトップ\n", successStyle.Render("✓"))
 	} else {
-		fmt.Printf("  ✗ デスクトップ\n")
+		fmt.Printf("  %s デスクトップ\n", errorStyle.Render("✗"))
 	}
 	if cfg.Targets.Mobile {
-		fmt.Printf("  %s モバイル\n", green("✓"))
+		fmt.Printf("  %s モバイル\n", successStyle.Render("✓"))
 	} else {
-		fmt.Printf("  ✗ モバイル\n")
+		fmt.Printf("  %s モバイル\n", errorStyle.Render("✗"))
 	}
 
 	// 適用範囲
-	fmt.Printf("\n%s\n", cyan("適用範囲:"))
+	fmt.Println()
+	fmt.Println(infoStyle.Render("適用範囲:"))
 	switch cfg.Scope {
 	case config.ScopeAll:
-		fmt.Printf("  %s すべてのユーザー (ALL)\n", green("✓"))
+		fmt.Printf("  %s すべてのユーザー (ALL)\n", successStyle.Render("✓"))
 	case config.ScopeAdmin:
-		fmt.Printf("  %s アプリ管理者のみ (ADMIN)\n", yellow("✓"))
+		fmt.Printf("  %s アプリ管理者のみ (ADMIN)\n", warnStyle.Render("✓"))
 	case config.ScopeNone:
-		fmt.Printf("  ✗ 適用しない (NONE)\n")
+		fmt.Printf("  %s 適用しない (NONE)\n", errorStyle.Render("✗"))
 	default:
-		fmt.Printf("  %s すべてのユーザー (ALL)\n", green("✓"))
+		fmt.Printf("  %s すべてのユーザー (ALL)\n", successStyle.Render("✓"))
 	}
 
 	// 出力ファイル名
-	fmt.Printf("\n%s\n", cyan("出力:"))
+	fmt.Println()
+	fmt.Println(infoStyle.Render("出力:"))
 	fmt.Printf("  ファイル名: %s.js / %s.css\n", cfg.GetOutputName(), cfg.GetOutputName())
 
 	// Dev設定
-	fmt.Printf("\n%s\n", cyan("開発サーバー:"))
-	fmt.Printf("  オリジン:     %s\n", cfg.Dev.Origin)
-	fmt.Printf("  エントリー:   %s\n", cfg.Dev.Entry)
+	fmt.Println()
+	fmt.Println(infoStyle.Render("開発サーバー:"))
+	fmt.Printf("  オリジン:   %s\n", cfg.Dev.Origin)
+	fmt.Printf("  エントリー: %s\n", cfg.Dev.Entry)
 
 	fmt.Println()
 	fmt.Println("Enterキーで戻る...")
@@ -202,10 +191,9 @@ func showCurrentConfig(cfg *config.Config) {
 }
 
 func editKintoneConfig(cfg *config.Config) error {
-	cyan := color.New(color.FgCyan).SprintFunc()
-	green := color.New(color.FgGreen).SprintFunc()
-
-	fmt.Printf("\n%s kintone接続設定\n\n", cyan("🔧"))
+	fmt.Println()
+	ui.Title("kintone接続設定")
+	fmt.Println()
 
 	// ドメイン
 	domain, err := prompt.AskDomain(cfg.Kintone.Domain)
@@ -215,27 +203,24 @@ func editKintoneConfig(cfg *config.Config) error {
 	cfg.Kintone.Domain = domain
 
 	// アプリID
-	var appIDStr string
-	appIDPrompt := &survey.Input{
-		Message: "アプリID:",
-		Default: strconv.Itoa(cfg.Kintone.AppID),
-	}
-	if err := survey.AskOne(appIDPrompt, &appIDStr, survey.WithValidator(survey.Required)); err != nil {
-		return err
-	}
-	appID, err := strconv.Atoi(appIDStr)
+	appID, err := prompt.AskAppID(cfg.Kintone.AppID)
 	if err != nil {
-		return fmt.Errorf("アプリIDは数値で入力してください")
+		return err
 	}
 	cfg.Kintone.AppID = appID
 
 	// 認証情報を更新するか確認
 	var updateAuth bool
-	authPrompt := &survey.Confirm{
-		Message: "認証情報を更新しますか?",
-		Default: false,
-	}
-	if err := survey.AskOne(authPrompt, &updateAuth); err != nil {
+	err = ui.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("認証情報を更新しますか?").
+				Affirmative("はい").
+				Negative("いいえ").
+				Value(&updateAuth),
+		),
+	).Run()
+	if err != nil {
 		return err
 	}
 
@@ -252,13 +237,12 @@ func editKintoneConfig(cfg *config.Config) error {
 		cfg.Kintone.Auth.Password = password
 	}
 
-	fmt.Printf("\n%s kintone接続設定を更新しました\n", green("✓"))
+	fmt.Println()
+	ui.Success("kintone接続設定を更新しました")
 	return nil
 }
 
 func editTargets(cfg *config.Config) error {
-	green := color.New(color.FgGreen).SprintFunc()
-
 	fmt.Println()
 
 	desktop, mobile, err := prompt.AskTargets(cfg.Targets.Desktop, cfg.Targets.Mobile)
@@ -269,13 +253,12 @@ func editTargets(cfg *config.Config) error {
 	cfg.Targets.Desktop = desktop
 	cfg.Targets.Mobile = mobile
 
-	fmt.Printf("\n%s ターゲットを更新しました\n", green("✓"))
+	fmt.Println()
+	ui.Success("ターゲットを更新しました")
 	return nil
 }
 
 func editScope(cfg *config.Config) error {
-	green := color.New(color.FgGreen).SprintFunc()
-
 	fmt.Println()
 
 	currentScope := prompt.Scope(cfg.Scope)
@@ -290,13 +273,12 @@ func editScope(cfg *config.Config) error {
 
 	cfg.Scope = string(scope)
 
-	fmt.Printf("\n%s 適用範囲を更新しました\n", green("✓"))
+	fmt.Println()
+	ui.Success("適用範囲を更新しました")
 	return nil
 }
 
 func editOutput(cfg *config.Config) error {
-	green := color.New(color.FgGreen).SprintFunc()
-
 	fmt.Println()
 
 	output, err := prompt.AskOutput(cfg.GetOutputName())
@@ -306,14 +288,12 @@ func editOutput(cfg *config.Config) error {
 
 	cfg.Output = output
 
-	fmt.Printf("\n%s 出力ファイル名を更新しました (%s.js / %s.css)\n", green("✓"), output, output)
+	fmt.Println()
+	ui.Success(fmt.Sprintf("出力ファイル名を更新しました (%s.js / %s.css)", output, output))
 	return nil
 }
 
 func editEntry(projectDir string, cfg *config.Config) error {
-	green := color.New(color.FgGreen).SprintFunc()
-	yellow := color.New(color.FgYellow).SprintFunc()
-
 	fmt.Println()
 
 	// src/ 直下の js, ts, jsx, tsx ファイルを検索
@@ -334,50 +314,50 @@ func editEntry(projectDir string, cfg *config.Config) error {
 	}
 
 	if len(entryFiles) == 0 {
-		fmt.Printf("  %s src/ ディレクトリにエントリーファイルが見つかりません\n", yellow("⚠"))
+		ui.Warn("src/ ディレクトリにエントリーファイルが見つかりません")
 		fmt.Println("Enterキーで戻る...")
 		fmt.Scanln()
 		return nil
 	}
 
-	// 現在の設定を先頭に表示
-	currentEntry := cfg.Dev.Entry
-	defaultIndex := 0
-	for i, f := range entryFiles {
-		if f == currentEntry {
-			defaultIndex = i
-			break
-		}
+	// オプションを作成
+	var options []huh.Option[string]
+	for _, f := range entryFiles {
+		options = append(options, huh.NewOption(f, f))
 	}
 
 	var selected string
-	selectPrompt := &survey.Select{
-		Message: "エントリーファイルを選択:",
-		Options: entryFiles,
-		Default: entryFiles[defaultIndex],
-	}
-	if err := survey.AskOne(selectPrompt, &selected); err != nil {
+	err = ui.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("エントリーファイルを選択").
+				Options(options...).
+				Value(&selected),
+		),
+	).Run()
+	if err != nil {
 		return err
 	}
 
 	cfg.Dev.Entry = selected
 
-	fmt.Printf("\n%s エントリーファイルを更新しました (%s)\n", green("✓"), selected)
+	fmt.Println()
+	ui.Success(fmt.Sprintf("エントリーファイルを更新しました (%s)", selected))
 	return nil
 }
 
 func editFramework(projectDir string, cfg *config.Config) error {
-	cyan := color.New(color.FgCyan).SprintFunc()
-	green := color.New(color.FgGreen).SprintFunc()
-	yellow := color.New(color.FgYellow).SprintFunc()
+	fmt.Println()
+	ui.Title("フレームワークの変更")
+	fmt.Println()
 
-	fmt.Printf("\n%s フレームワークの変更\n\n", cyan("🔧"))
+	infoStyle := lipgloss.NewStyle().Foreground(ui.ColorCyan)
 
 	// 現在のフレームワークを検出
 	currentFramework := detectCurrentFramework(projectDir)
 	currentLanguage := detectCurrentLanguage(projectDir)
 
-	fmt.Printf("現在のフレームワーク: %s (%s)\n\n", cyan(string(currentFramework)), string(currentLanguage))
+	fmt.Printf("現在のフレームワーク: %s (%s)\n\n", infoStyle.Render(string(currentFramework)), string(currentLanguage))
 
 	// 新しいフレームワークを選択
 	newFramework, err := prompt.AskFramework()
@@ -386,7 +366,8 @@ func editFramework(projectDir string, cfg *config.Config) error {
 	}
 
 	if newFramework == currentFramework {
-		fmt.Printf("\n%s フレームワークは変更されていません\n", yellow("⚠"))
+		fmt.Println()
+		ui.Warn("フレームワークは変更されていません")
 		fmt.Println("Enterキーで戻る...")
 		fmt.Scanln()
 		return nil
@@ -394,11 +375,16 @@ func editFramework(projectDir string, cfg *config.Config) error {
 
 	// 確認
 	var confirm bool
-	confirmPrompt := &survey.Confirm{
-		Message: fmt.Sprintf("%s から %s に変更しますか?", currentFramework, newFramework),
-		Default: true,
-	}
-	if err := survey.AskOne(confirmPrompt, &confirm); err != nil {
+	err = ui.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title(fmt.Sprintf("%s から %s に変更しますか?", currentFramework, newFramework)).
+				Affirmative("はい").
+				Negative("いいえ").
+				Value(&confirm),
+		),
+	).Run()
+	if err != nil {
 		return err
 	}
 	if !confirm {
@@ -407,57 +393,80 @@ func editFramework(projectDir string, cfg *config.Config) error {
 
 	fmt.Println()
 
-	// 1. package.json を更新
-	fmt.Printf("  package.json を更新...")
-	if err := updatePackageJSONFramework(projectDir, currentFramework, newFramework, currentLanguage); err != nil {
-		fmt.Println()
-		return fmt.Errorf("package.json更新エラー: %w", err)
-	}
-	fmt.Printf(" %s\n", green("✓"))
+	pm := detectPackageManager(projectDir)
 
-	// 2. vite.config.ts を再生成
-	fmt.Printf("  vite.config.ts を再生成...")
-	if err := generator.GenerateViteConfig(projectDir, newFramework, currentLanguage); err != nil {
-		fmt.Println()
+	// 1. 旧フレームワークのパッケージをアンインストール
+	err = ui.Spinner("旧パッケージを削除中...", func() {
+		oldDeps, oldDevDeps := getFrameworkPackageNames(currentFramework, currentLanguage)
+		allOldPkgs := append(oldDeps, oldDevDeps...)
+		if len(allOldPkgs) > 0 {
+			args := append([]string{"uninstall"}, allOldPkgs...)
+			uninstallCmd := exec.Command(pm, args...)
+			uninstallCmd.Dir = projectDir
+			uninstallCmd.Stdout = nil
+			uninstallCmd.Stderr = nil
+			uninstallCmd.Run() // エラーは無視（パッケージがない場合もある）
+		}
+	})
+	if err != nil {
+		return err
+	}
+	ui.Success("旧パッケージを削除しました")
+
+	// 2. 新フレームワークのパッケージをインストール
+	fmt.Println()
+	newDeps, newDevDeps := getFrameworkPackageNames(newFramework, currentLanguage)
+
+	if len(newDeps) > 0 {
+		fmt.Printf("  依存パッケージをインストール中...\n")
+		args := append([]string{"install"}, newDeps...)
+		installCmd := exec.Command(pm, args...)
+		installCmd.Dir = projectDir
+		installCmd.Stdout = os.Stdout
+		installCmd.Stderr = os.Stderr
+		if err := installCmd.Run(); err != nil {
+			return fmt.Errorf("依存パッケージインストールエラー: %w", err)
+		}
+	}
+
+	if len(newDevDeps) > 0 {
+		fmt.Printf("  開発パッケージをインストール中...\n")
+		args := append([]string{"install", "-D"}, newDevDeps...)
+		installCmd := exec.Command(pm, args...)
+		installCmd.Dir = projectDir
+		installCmd.Stdout = os.Stdout
+		installCmd.Stderr = os.Stderr
+		if err := installCmd.Run(); err != nil {
+			return fmt.Errorf("開発パッケージインストールエラー: %w", err)
+		}
+	}
+	ui.Success("新パッケージをインストールしました")
+
+	// 3. vite.config.ts を再生成
+	err = ui.SpinnerWithResult("vite.config.ts を再生成中...", func() error {
+		return generator.GenerateViteConfig(projectDir, newFramework, currentLanguage)
+	})
+	if err != nil {
 		return fmt.Errorf("vite.config.ts再生成エラー: %w", err)
 	}
-	fmt.Printf(" %s\n", green("✓"))
+	ui.Success("vite.config.ts を再生成しました")
 
-	// 3. eslint.config.js を再生成
-	fmt.Printf("  eslint.config.js を再生成...")
-	if err := generator.RegenerateESLintConfig(projectDir, newFramework, currentLanguage); err != nil {
-		fmt.Println()
+	// 4. eslint.config.js を再生成
+	err = ui.SpinnerWithResult("eslint.config.js を再生成中...", func() error {
+		return generator.RegenerateESLintConfig(projectDir, newFramework, currentLanguage)
+	})
+	if err != nil {
 		return fmt.Errorf("eslint.config.js再生成エラー: %w", err)
 	}
-	fmt.Printf(" %s\n", green("✓"))
+	ui.Success("eslint.config.js を再生成しました")
 
-	// 4. node_modules を削除
-	fmt.Printf("  node_modules を削除...")
-	nodeModulesPath := filepath.Join(projectDir, "node_modules")
-	if err := os.RemoveAll(nodeModulesPath); err != nil {
-		fmt.Println()
-		return fmt.Errorf("node_modules削除エラー: %w", err)
-	}
-	fmt.Printf(" %s\n", green("✓"))
-
-	// 5. パッケージマネージャーを検出してインストール
-	pm := detectPackageManager(projectDir)
-	fmt.Printf("\n%s パッケージを再インストール中... (%s)\n", cyan("→"), pm)
-
-	installCmd := exec.Command(pm, "install")
-	installCmd.Dir = projectDir
-	installCmd.Stdout = os.Stdout
-	installCmd.Stderr = os.Stderr
-
-	if err := installCmd.Run(); err != nil {
-		return fmt.Errorf("インストールエラー: %w", err)
-	}
-
-	// 6. config.json のエントリーパスを更新
+	// 5. config.json のエントリーパスを更新
 	cfg.Dev.Entry = generator.GetEntryPath(newFramework, currentLanguage)
 
-	fmt.Printf("\n%s フレームワークを %s に変更しました!\n\n", green("✓"), newFramework)
-	fmt.Printf("%s src/ ディレクトリのコードを手動で書き換えてください\n", yellow("⚠"))
+	fmt.Println()
+	ui.Success(fmt.Sprintf("フレームワークを %s に変更しました!", newFramework))
+	fmt.Println()
+	ui.Warn("src/ ディレクトリのコードを手動で書き換えてください")
 	fmt.Printf("  エントリーファイル: %s\n\n", cfg.Dev.Entry)
 	fmt.Println("Enterキーで戻る...")
 	fmt.Scanln()
@@ -498,93 +507,27 @@ func detectCurrentLanguage(projectDir string) prompt.Language {
 	return prompt.LanguageJavaScript
 }
 
-func updatePackageJSONFramework(projectDir string, oldFw, newFw prompt.Framework, lang prompt.Language) error {
-	pkgPath := filepath.Join(projectDir, "package.json")
-	data, err := os.ReadFile(pkgPath)
-	if err != nil {
-		return err
-	}
-
-	var pkg map[string]interface{}
-	if err := json.Unmarshal(data, &pkg); err != nil {
-		return err
-	}
-
-	deps, _ := pkg["dependencies"].(map[string]interface{})
-	if deps == nil {
-		deps = make(map[string]interface{})
-		pkg["dependencies"] = deps
-	}
-
-	devDeps, _ := pkg["devDependencies"].(map[string]interface{})
-	if devDeps == nil {
-		devDeps = make(map[string]interface{})
-		pkg["devDependencies"] = devDeps
-	}
-
-	// 旧フレームワークのパッケージを削除
-	removeFrameworkPackages(deps, devDeps, oldFw)
-
-	// 新フレームワークのパッケージを追加
-	addFrameworkPackages(deps, devDeps, newFw, lang)
-
-	// JSON を書き出し
-	output, err := json.MarshalIndent(pkg, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(pkgPath, output, 0644)
-}
-
-func removeFrameworkPackages(deps, devDeps map[string]interface{}, fw prompt.Framework) {
+// getFrameworkPackageNames はフレームワーク固有のパッケージ名リストを返す（バージョンなし）
+func getFrameworkPackageNames(fw prompt.Framework, lang prompt.Language) (deps []string, devDeps []string) {
 	switch fw {
 	case prompt.FrameworkReact:
-		delete(deps, "react")
-		delete(deps, "react-dom")
-		delete(devDeps, "@vitejs/plugin-react")
-		delete(devDeps, "eslint-plugin-react-hooks")
-		delete(devDeps, "@types/react")
-		delete(devDeps, "@types/react-dom")
-	case prompt.FrameworkVue:
-		delete(deps, "vue")
-		delete(devDeps, "@vitejs/plugin-vue")
-		delete(devDeps, "eslint-plugin-vue")
-		delete(devDeps, "vue-tsc")
-	case prompt.FrameworkSvelte:
-		delete(deps, "svelte")
-		delete(devDeps, "@sveltejs/vite-plugin-svelte")
-		delete(devDeps, "eslint-plugin-svelte")
-		delete(devDeps, "svelte-check")
-		delete(devDeps, "tslib")
-	}
-}
-
-func addFrameworkPackages(deps, devDeps map[string]interface{}, fw prompt.Framework, lang prompt.Language) {
-	switch fw {
-	case prompt.FrameworkReact:
-		deps["react"] = "^18.2.0"
-		deps["react-dom"] = "^18.2.0"
-		devDeps["@vitejs/plugin-react"] = "^4.2.0"
-		devDeps["eslint-plugin-react-hooks"] = "^5.0.0"
+		deps = append(deps, "react", "react-dom")
+		devDeps = append(devDeps, "@vitejs/plugin-react", "eslint-plugin-react-hooks")
 		if lang == prompt.LanguageTypeScript {
-			devDeps["@types/react"] = "^18.2.0"
-			devDeps["@types/react-dom"] = "^18.2.0"
+			devDeps = append(devDeps, "@types/react", "@types/react-dom")
 		}
 	case prompt.FrameworkVue:
-		deps["vue"] = "^3.4.0"
-		devDeps["@vitejs/plugin-vue"] = "^5.0.0"
-		devDeps["eslint-plugin-vue"] = "^9.0.0"
+		deps = append(deps, "vue")
+		devDeps = append(devDeps, "@vitejs/plugin-vue", "eslint-plugin-vue")
 		if lang == prompt.LanguageTypeScript {
-			devDeps["vue-tsc"] = "^1.8.0"
+			devDeps = append(devDeps, "vue-tsc")
 		}
 	case prompt.FrameworkSvelte:
-		deps["svelte"] = "^4.2.0"
-		devDeps["@sveltejs/vite-plugin-svelte"] = "^3.0.0"
-		devDeps["eslint-plugin-svelte"] = "^2.0.0"
+		deps = append(deps, "svelte")
+		devDeps = append(devDeps, "@sveltejs/vite-plugin-svelte", "eslint-plugin-svelte")
 		if lang == prompt.LanguageTypeScript {
-			devDeps["svelte-check"] = "^3.6.0"
-			devDeps["tslib"] = "^2.6.0"
+			devDeps = append(devDeps, "svelte-check", "tslib")
 		}
 	}
+	return deps, devDeps
 }

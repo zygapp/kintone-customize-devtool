@@ -1,11 +1,15 @@
 package prompt
 
 import (
+	"errors"
+	"strconv"
 	"strings"
 
-	"github.com/AlecAivazis/survey/v2"
-	"github.com/fatih/color"
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 )
+
+var errRequired = errors.New("入力必須です")
 
 type Framework string
 
@@ -56,13 +60,33 @@ type InitAnswers struct {
 	Output         string
 }
 
+// カラー定義
+var (
+	colorCyan   = lipgloss.Color("39")
+	colorGreen  = lipgloss.Color("42")
+	colorYellow = lipgloss.Color("214")
+	colorRed    = lipgloss.Color("196")
+	colorOrange = lipgloss.Color("208")
+	colorBlue   = lipgloss.Color("33")
+	colorWhite  = lipgloss.Color("255")
+)
+
+func newForm(groups ...*huh.Group) *huh.Form {
+	return huh.NewForm(groups...).WithTheme(huh.ThemeCatppuccin())
+}
+
 func AskCreateDir() (bool, error) {
 	var answer bool
-	prompt := &survey.Confirm{
-		Message: "プロジェクトディレクトリを作成しますか?",
-		Default: true,
-	}
-	if err := survey.AskOne(prompt, &answer); err != nil {
+	err := newForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("プロジェクトディレクトリを作成しますか?").
+				Affirmative("はい").
+				Negative("いいえ").
+				Value(&answer),
+		),
+	).Run()
+	if err != nil {
 		return false, err
 	}
 	return answer, nil
@@ -70,24 +94,55 @@ func AskCreateDir() (bool, error) {
 
 func AskProjectName(defaultVal string) (string, error) {
 	var answer string
-	prompt := &survey.Input{
-		Message: "プロジェクト名:",
-		Default: defaultVal,
-	}
-	if err := survey.AskOne(prompt, &answer, survey.WithValidator(survey.Required)); err != nil {
+	err := newForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("プロジェクト名").
+				Value(&answer).
+				Placeholder(defaultVal).
+				Validate(func(s string) error {
+					if s == "" {
+						return errRequired
+					}
+					return nil
+				}),
+		),
+	).Run()
+	if err != nil {
 		return "", err
+	}
+	if answer == "" {
+		answer = defaultVal
 	}
 	return answer, nil
 }
 
 func AskDomain(defaultVal string) (string, error) {
 	var answer string
-	prompt := &survey.Input{
-		Message: "kintone ドメイン (例: example または example.cybozu.com):",
-		Default: defaultVal,
+	placeholder := "example または example.cybozu.com"
+	if defaultVal != "" {
+		placeholder = defaultVal
 	}
-	if err := survey.AskOne(prompt, &answer, survey.WithValidator(survey.Required)); err != nil {
+	err := newForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("kintone ドメイン").
+				Description("例: example または example.cybozu.com").
+				Value(&answer).
+				Placeholder(placeholder).
+				Validate(func(s string) error {
+					if s == "" && defaultVal == "" {
+						return errRequired
+					}
+					return nil
+				}),
+		),
+	).Run()
+	if err != nil {
 		return "", err
+	}
+	if answer == "" {
+		answer = defaultVal
 	}
 	return CompleteDomain(answer), nil
 }
@@ -102,89 +157,103 @@ func CompleteDomain(domain string) string {
 }
 
 func AskAppID(defaultVal int) (int, error) {
-	var answer int
-	prompt := &survey.Input{
-		Message: "アプリ ID:",
-	}
+	var answer string
+	placeholder := ""
 	if defaultVal > 0 {
-		prompt.Default = string(rune(defaultVal))
+		placeholder = strconv.Itoa(defaultVal)
 	}
-	if err := survey.AskOne(prompt, &answer, survey.WithValidator(survey.Required)); err != nil {
+	err := newForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("アプリ ID").
+				Value(&answer).
+				Placeholder(placeholder).
+				Validate(func(s string) error {
+					if s == "" && defaultVal == 0 {
+						return errRequired
+					}
+					if s != "" {
+						if _, err := strconv.Atoi(s); err != nil {
+							return err
+						}
+					}
+					return nil
+				}),
+		),
+	).Run()
+	if err != nil {
 		return 0, err
+	}
+	if answer == "" {
+		return defaultVal, nil
+	}
+	return strconv.Atoi(answer)
+}
+
+func AskFramework() (Framework, error) {
+	cyanStyle := lipgloss.NewStyle().Foreground(colorCyan)
+	greenStyle := lipgloss.NewStyle().Foreground(colorGreen)
+	orangeStyle := lipgloss.NewStyle().Foreground(colorOrange)
+	yellowStyle := lipgloss.NewStyle().Foreground(colorYellow)
+
+	var answer Framework
+	err := newForm(
+		huh.NewGroup(
+			huh.NewSelect[Framework]().
+				Title("フレームワーク").
+				Options(
+					huh.NewOption(cyanStyle.Render("React"), FrameworkReact),
+					huh.NewOption(greenStyle.Render("Vue"), FrameworkVue),
+					huh.NewOption(orangeStyle.Render("Svelte"), FrameworkSvelte),
+					huh.NewOption(yellowStyle.Render("Vanilla"), FrameworkVanilla),
+				).
+				Value(&answer),
+		),
+	).Run()
+	if err != nil {
+		return "", err
 	}
 	return answer, nil
 }
 
-func AskFramework() (Framework, error) {
-	cyan := color.New(color.FgCyan).SprintFunc()
-	green := color.New(color.FgGreen).SprintFunc()
-	hiRed := color.New(color.FgHiRed).SprintFunc()
-	yellow := color.New(color.FgYellow).SprintFunc()
-
-	options := []string{
-		cyan("React"),
-		green("Vue"),
-		hiRed("Svelte"),
-		yellow("Vanilla"),
-	}
-
-	var answer string
-	prompt := &survey.Select{
-		Message: "フレームワーク:",
-		Options: options,
-		Default: options[0],
-	}
-	if err := survey.AskOne(prompt, &answer); err != nil {
-		return "", err
-	}
-
-	switch answer {
-	case options[0]:
-		return FrameworkReact, nil
-	case options[1]:
-		return FrameworkVue, nil
-	case options[2]:
-		return FrameworkSvelte, nil
-	case options[3]:
-		return FrameworkVanilla, nil
-	}
-	return FrameworkReact, nil
-}
-
 func AskLanguage() (Language, error) {
-	cyan := color.New(color.FgCyan).SprintFunc()
-	yellow := color.New(color.FgYellow).SprintFunc()
+	cyanStyle := lipgloss.NewStyle().Foreground(colorCyan)
+	yellowStyle := lipgloss.NewStyle().Foreground(colorYellow)
 
-	options := []string{
-		cyan("TypeScript"),
-		yellow("JavaScript"),
-	}
-
-	var answer string
-	prompt := &survey.Select{
-		Message: "言語:",
-		Options: options,
-		Default: options[0],
-	}
-	if err := survey.AskOne(prompt, &answer); err != nil {
+	var answer Language
+	err := newForm(
+		huh.NewGroup(
+			huh.NewSelect[Language]().
+				Title("言語").
+				Options(
+					huh.NewOption(cyanStyle.Render("TypeScript"), LanguageTypeScript),
+					huh.NewOption(yellowStyle.Render("JavaScript"), LanguageJavaScript),
+				).
+				Value(&answer),
+		),
+	).Run()
+	if err != nil {
 		return "", err
 	}
-
-	switch answer {
-	case options[0]:
-		return LanguageTypeScript, nil
-	case options[1]:
-		return LanguageJavaScript, nil
-	}
-	return LanguageTypeScript, nil
+	return answer, nil
 }
 
 func AskUsername() (string, error) {
 	var answer string
-	prompt := &survey.Input{
-		Message: "kintone ユーザー名:",
-	}
-	if err := survey.AskOne(prompt, &answer, survey.WithValidator(survey.Required)); err != nil {
+	err := newForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("kintone ユーザー名").
+				Value(&answer).
+				Validate(func(s string) error {
+					if s == "" {
+						return errRequired
+					}
+					return nil
+				}),
+		),
+	).Run()
+	if err != nil {
 		return "", err
 	}
 	return answer, nil
@@ -192,80 +261,88 @@ func AskUsername() (string, error) {
 
 func AskPassword() (string, error) {
 	var answer string
-	prompt := &survey.Password{
-		Message: "kintone パスワード:",
-	}
-	if err := survey.AskOne(prompt, &answer, survey.WithValidator(survey.Required)); err != nil {
+	err := newForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("kintone パスワード").
+				EchoMode(huh.EchoModePassword).
+				Value(&answer).
+				Validate(func(s string) error {
+					if s == "" {
+						return errRequired
+					}
+					return nil
+				}),
+		),
+	).Run()
+	if err != nil {
 		return "", err
 	}
 	return answer, nil
 }
 
 func AskPackageManager() (PackageManager, error) {
-	red := color.New(color.FgRed).SprintFunc()
-	cyan := color.New(color.FgCyan).SprintFunc()
-	blue := color.New(color.FgBlue).SprintFunc()
-	white := color.New(color.FgWhite).SprintFunc()
+	redStyle := lipgloss.NewStyle().Foreground(colorRed)
+	cyanStyle := lipgloss.NewStyle().Foreground(colorCyan)
+	blueStyle := lipgloss.NewStyle().Foreground(colorBlue)
+	whiteStyle := lipgloss.NewStyle().Foreground(colorWhite)
 
-	options := []string{
-		red("npm"),
-		cyan("pnpm"),
-		blue("yarn"),
-		white("bun"),
-	}
-
-	var answer string
-	prompt := &survey.Select{
-		Message: "パッケージマネージャー:",
-		Options: options,
-		Default: options[0],
-	}
-	if err := survey.AskOne(prompt, &answer); err != nil {
+	var answer PackageManager
+	err := newForm(
+		huh.NewGroup(
+			huh.NewSelect[PackageManager]().
+				Title("パッケージマネージャー").
+				Options(
+					huh.NewOption(redStyle.Render("npm"), PackageManagerNpm),
+					huh.NewOption(cyanStyle.Render("pnpm"), PackageManagerPnpm),
+					huh.NewOption(blueStyle.Render("yarn"), PackageManagerYarn),
+					huh.NewOption(whiteStyle.Render("bun"), PackageManagerBun),
+				).
+				Value(&answer),
+		),
+	).Run()
+	if err != nil {
 		return "", err
 	}
-
-	switch answer {
-	case options[0]:
-		return PackageManagerNpm, nil
-	case options[1]:
-		return PackageManagerPnpm, nil
-	case options[2]:
-		return PackageManagerYarn, nil
-	case options[3]:
-		return PackageManagerBun, nil
-	}
-	return PackageManagerNpm, nil
+	return answer, nil
 }
 
 func AskTargets(defaultDesktop, defaultMobile bool) (desktop bool, mobile bool, err error) {
-	options := []string{
-		"デスクトップ",
-		"モバイル",
-	}
-
+	var answers []string
 	defaults := []string{}
 	if defaultDesktop {
-		defaults = append(defaults, options[0])
+		defaults = append(defaults, "desktop")
 	}
 	if defaultMobile {
-		defaults = append(defaults, options[1])
+		defaults = append(defaults, "mobile")
 	}
 
-	var answers []string
-	prompt := &survey.MultiSelect{
-		Message: "カスタマイズ対象:",
-		Options: options,
-		Default: defaults,
-	}
-	if err := survey.AskOne(prompt, &answers, survey.WithValidator(survey.MinItems(1))); err != nil {
+	err = newForm(
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title("カスタマイズ対象").
+				Options(
+					huh.NewOption("デスクトップ", "desktop").Selected(defaultDesktop),
+					huh.NewOption("モバイル", "mobile").Selected(defaultMobile),
+				).
+				Value(&answers).
+				Validate(func(s []string) error {
+					if len(s) == 0 {
+						return errRequired
+					}
+					return nil
+				}),
+		),
+	).Run()
+	if err != nil {
 		return false, false, err
 	}
 
 	for _, a := range answers {
-		if a == options[0] {
+		if a == "desktop" {
 			desktop = true
 		}
-		if a == options[1] {
+		if a == "mobile" {
 			mobile = true
 		}
 	}
@@ -274,54 +351,51 @@ func AskTargets(defaultDesktop, defaultMobile bool) (desktop bool, mobile bool, 
 }
 
 func AskScope(defaultScope Scope) (Scope, error) {
-	green := color.New(color.FgGreen).SprintFunc()
-	yellow := color.New(color.FgYellow).SprintFunc()
-	red := color.New(color.FgRed).SprintFunc()
+	greenStyle := lipgloss.NewStyle().Foreground(colorGreen)
+	yellowStyle := lipgloss.NewStyle().Foreground(colorYellow)
+	redStyle := lipgloss.NewStyle().Foreground(colorRed)
 
-	options := []string{
-		green("すべてのユーザーに適用 (ALL)"),
-		yellow("アプリ管理者のみに適用 (ADMIN)"),
-		red("適用しない (NONE)"),
-	}
-
-	defaultIndex := 0
-	switch defaultScope {
-	case ScopeAdmin:
-		defaultIndex = 1
-	case ScopeNone:
-		defaultIndex = 2
-	}
-
-	var answer string
-	prompt := &survey.Select{
-		Message: "カスタマイズの適用範囲:",
-		Options: options,
-		Default: options[defaultIndex],
-	}
-	if err := survey.AskOne(prompt, &answer); err != nil {
+	var answer Scope
+	err := newForm(
+		huh.NewGroup(
+			huh.NewSelect[Scope]().
+				Title("カスタマイズの適用範囲").
+				Options(
+					huh.NewOption(greenStyle.Render("すべてのユーザーに適用 (ALL)"), ScopeAll),
+					huh.NewOption(yellowStyle.Render("アプリ管理者のみに適用 (ADMIN)"), ScopeAdmin),
+					huh.NewOption(redStyle.Render("適用しない (NONE)"), ScopeNone),
+				).
+				Value(&answer),
+		),
+	).Run()
+	if err != nil {
 		return "", err
 	}
-
-	switch answer {
-	case options[0]:
-		return ScopeAll, nil
-	case options[1]:
-		return ScopeAdmin, nil
-	case options[2]:
-		return ScopeNone, nil
-	}
-	return ScopeAll, nil
+	return answer, nil
 }
 
 func AskOutput(defaultVal string) (string, error) {
 	var answer string
-	prompt := &survey.Input{
-		Message: "出力ファイル名 (拡張子なし):",
-		Default: defaultVal,
-		Help:    "ビルド時に生成されるファイル名を指定します (例: customize → customize.js, customize.css)",
-	}
-	if err := survey.AskOne(prompt, &answer, survey.WithValidator(survey.Required)); err != nil {
+	err := newForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("出力ファイル名 (拡張子なし)").
+				Description("ビルド時に生成されるファイル名 (例: customize → customize.js)").
+				Value(&answer).
+				Placeholder(defaultVal).
+				Validate(func(s string) error {
+					if s == "" && defaultVal == "" {
+						return errRequired
+					}
+					return nil
+				}),
+		),
+	).Run()
+	if err != nil {
 		return "", err
+	}
+	if answer == "" {
+		answer = defaultVal
 	}
 	return answer, nil
 }

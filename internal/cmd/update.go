@@ -7,8 +7,9 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/fatih/color"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/kintone/kcdev/internal/config"
+	"github.com/kintone/kcdev/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -33,11 +34,11 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("設定ファイルが見つかりません。kcdev init を実行してください: %w", err)
 	}
 
-	green := color.New(color.FgGreen).SprintFunc()
-	cyan := color.New(color.FgCyan).SprintFunc()
-	yellow := color.New(color.FgYellow).SprintFunc()
+	infoStyle := lipgloss.NewStyle().Foreground(ui.ColorCyan)
 
-	fmt.Printf("\n%s 依存パッケージを更新中...\n\n", cyan("→"))
+	fmt.Println()
+	ui.Info("依存パッケージを更新中...")
+	fmt.Println()
 
 	// package.json を読み込み
 	pkgPath := filepath.Join(projectDir, "package.json")
@@ -101,11 +102,12 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(packagesToUpdate) == 0 {
-		fmt.Printf("%s 更新対象のパッケージがありません\n\n", yellow("!"))
+		ui.Warn("更新対象のパッケージがありません")
+		fmt.Println()
 		return nil
 	}
 
-	fmt.Printf("%s 以下のパッケージを更新します:\n", yellow("○"))
+	fmt.Printf("%s 以下のパッケージを更新します:\n", infoStyle.Render("○"))
 	for _, pkg := range packagesToUpdate {
 		fmt.Printf("  - %s\n", pkg)
 	}
@@ -127,7 +129,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		updateArgs = append([]string{"update", "--save"}, packagesToUpdate...)
 	}
 
-	fmt.Printf("%s %s %s\n", yellow("○"), pm, updateArgs[0])
+	fmt.Printf("%s %s %s\n", infoStyle.Render("○"), pm, updateArgs[0])
 
 	updateCmd := exec.Command(pm, updateArgs...)
 	updateCmd.Dir = projectDir
@@ -138,7 +140,9 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("更新エラー: %w", err)
 	}
 
-	fmt.Printf("\n%s パッケージを更新しました!\n\n", green("✓"))
+	fmt.Println()
+	ui.Success("パッケージを更新しました!")
+	fmt.Println()
 	return nil
 }
 

@@ -174,8 +174,6 @@ type packageScripts struct {
 }
 
 func generatePackageJSON(projectDir string, answers *prompt.InitAnswers) error {
-	deps := getFrameworkDependencies(answers.Framework, answers.Language)
-
 	scripts := packageScripts{
 		Dev:           "kcdev dev",
 		DevPreview:    "kcdev dev --preview",
@@ -190,14 +188,15 @@ func generatePackageJSON(projectDir string, answers *prompt.InitAnswers) error {
 		scripts.Types = "kcdev types"
 	}
 
+	// dependencies は空で生成（npm install で最新版を追加）
 	pkg := packageJSON{
 		Name:            answers.ProjectName,
 		Version:         "0.0.0",
 		Private:         true,
 		Type:            "module",
 		Scripts:         scripts,
-		Dependencies:    deps.dependencies,
-		DevDependencies: deps.devDependencies,
+		Dependencies:    make(map[string]string),
+		DevDependencies: make(map[string]string),
 	}
 
 	data, err := json.MarshalIndent(pkg, "", "  ")
@@ -208,58 +207,37 @@ func generatePackageJSON(projectDir string, answers *prompt.InitAnswers) error {
 	return os.WriteFile(filepath.Join(projectDir, "package.json"), data, 0644)
 }
 
-type dependencies struct {
-	dependencies    map[string]string
-	devDependencies map[string]string
-}
-
-func getFrameworkDependencies(framework prompt.Framework, language prompt.Language) dependencies {
-	deps := dependencies{
-		dependencies:    make(map[string]string),
-		devDependencies: make(map[string]string),
-	}
-
-	deps.devDependencies["vite"] = "^5.0.0"
-
-	// ESLint 共通
-	deps.devDependencies["eslint"] = "^9.0.0"
-	deps.devDependencies["@eslint/js"] = "^9.0.0"
-	deps.devDependencies["globals"] = "^15.0.0"
+// GetPackageList はフレームワークと言語に応じたパッケージ名リストを返す（バージョンなし）
+func GetPackageList(framework prompt.Framework, language prompt.Language) (deps []string, devDeps []string) {
+	// 共通 devDependencies
+	devDeps = append(devDeps, "vite", "eslint", "@eslint/js", "globals")
 
 	if language == prompt.LanguageTypeScript {
-		deps.devDependencies["typescript"] = "^5.3.0"
-		deps.devDependencies["@kintone/dts-gen"] = "^8.0.0"
-		deps.devDependencies["typescript-eslint"] = "^8.0.0"
+		devDeps = append(devDeps, "typescript", "@kintone/dts-gen", "typescript-eslint")
 	}
 
 	switch framework {
 	case prompt.FrameworkReact:
-		deps.dependencies["react"] = "^18.2.0"
-		deps.dependencies["react-dom"] = "^18.2.0"
-		deps.devDependencies["@vitejs/plugin-react"] = "^4.2.0"
-		deps.devDependencies["eslint-plugin-react-hooks"] = "^5.0.0"
+		deps = append(deps, "react", "react-dom")
+		devDeps = append(devDeps, "@vitejs/plugin-react", "eslint-plugin-react-hooks")
 		if language == prompt.LanguageTypeScript {
-			deps.devDependencies["@types/react"] = "^18.2.0"
-			deps.devDependencies["@types/react-dom"] = "^18.2.0"
+			devDeps = append(devDeps, "@types/react", "@types/react-dom")
 		}
 	case prompt.FrameworkVue:
-		deps.dependencies["vue"] = "^3.4.0"
-		deps.devDependencies["@vitejs/plugin-vue"] = "^5.0.0"
-		deps.devDependencies["eslint-plugin-vue"] = "^9.0.0"
+		deps = append(deps, "vue")
+		devDeps = append(devDeps, "@vitejs/plugin-vue", "eslint-plugin-vue")
 		if language == prompt.LanguageTypeScript {
-			deps.devDependencies["vue-tsc"] = "^1.8.0"
+			devDeps = append(devDeps, "vue-tsc")
 		}
 	case prompt.FrameworkSvelte:
-		deps.dependencies["svelte"] = "^4.2.0"
-		deps.devDependencies["@sveltejs/vite-plugin-svelte"] = "^3.0.0"
-		deps.devDependencies["eslint-plugin-svelte"] = "^2.0.0"
+		deps = append(deps, "svelte")
+		devDeps = append(devDeps, "@sveltejs/vite-plugin-svelte", "eslint-plugin-svelte")
 		if language == prompt.LanguageTypeScript {
-			deps.devDependencies["svelte-check"] = "^3.6.0"
-			deps.devDependencies["tslib"] = "^2.6.0"
+			devDeps = append(devDeps, "svelte-check", "tslib")
 		}
 	}
 
-	return deps
+	return deps, devDeps
 }
 
 func generateTypesPlaceholder(projectDir string) error {

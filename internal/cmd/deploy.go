@@ -6,10 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/AlecAivazis/survey/v2"
-	"github.com/fatih/color"
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/kintone/kcdev/internal/config"
 	"github.com/kintone/kcdev/internal/kintone"
+	"github.com/kintone/kcdev/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -55,8 +56,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("認証情報が見つかりません。.env または .kcdev/config.json に設定してください")
 	}
 
-	green := color.New(color.FgGreen).SprintFunc()
-	cyan := color.New(color.FgCyan).SprintFunc()
+	successStyle := lipgloss.NewStyle().Foreground(ui.ColorGreen)
 
 	// 設定から出力ファイル名を取得
 	outputName := cfg.GetOutputName()
@@ -68,11 +68,16 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	if _, err := os.Stat(distDir); err == nil {
 		// dist/が存在する場合、再ビルドするか確認
 		var rebuild bool
-		prompt := &survey.Confirm{
-			Message: "dist/ が存在します。再ビルドしますか?",
-			Default: true,
-		}
-		if err := survey.AskOne(prompt, &rebuild); err != nil {
+		err := ui.NewForm(
+			huh.NewGroup(
+				huh.NewConfirm().
+					Title("dist/ が存在します。再ビルドしますか?").
+					Affirmative("はい").
+					Negative("いいえ").
+					Value(&rebuild),
+			),
+		).Run()
+		if err != nil {
 			return fmt.Errorf("キャンセルされました")
 		}
 		if rebuild {
@@ -85,7 +90,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		}
 	} else {
 		// dist/が存在しない場合は自動でビルド
-		fmt.Printf("%s dist/ が見つかりません。ビルドを開始...\n", cyan("→"))
+		ui.Info("dist/ が見つかりません。ビルドを開始...")
 		// deploy の --skip-version を build に引き継ぐ
 		skipVersion = skipVersionDeploy
 		if err := runBuild(nil, nil); err != nil {
@@ -111,10 +116,11 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		targets = append(targets, "デスクトップ") // デフォルト
 	}
 
+	fmt.Println()
 	if previewOnlyDeploy {
-		fmt.Printf("\n%s プレビュー環境にデプロイ中... (%s, App:%d, %s)\n", cyan("→"), cfg.Kintone.Domain, cfg.Kintone.AppID, strings.Join(targets, "+"))
+		ui.Info(fmt.Sprintf("プレビュー環境にデプロイ中... (%s, App:%d, %s)", cfg.Kintone.Domain, cfg.Kintone.AppID, strings.Join(targets, "+")))
 	} else {
-		fmt.Printf("\n%s デプロイ中... (%s, App:%d, %s)\n", cyan("→"), cfg.Kintone.Domain, cfg.Kintone.AppID, strings.Join(targets, "+"))
+		ui.Info(fmt.Sprintf("デプロイ中... (%s, App:%d, %s)", cfg.Kintone.Domain, cfg.Kintone.AppID, strings.Join(targets, "+")))
 	}
 
 	client := kintone.NewClient(cfg.Kintone.Domain, username, password)
@@ -124,11 +130,10 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		kcdevFiles := []string{outputName + ".js", outputName + ".css", "kintone-dev-loader.js"}
 		existing, err := client.GetExistingCustomizations(cfg.Kintone.AppID, kcdevFiles)
 		if err != nil {
-			yellow := color.New(color.FgYellow).SprintFunc()
-			fmt.Printf("  %s 既存カスタマイズの確認をスキップ: %v\n", yellow("⚠"), err)
+			ui.Warn(fmt.Sprintf("既存カスタマイズの確認をスキップ: %v", err))
 		} else if existing.HasExisting() {
-			yellow := color.New(color.FgYellow).SprintFunc()
-			fmt.Printf("\n  %s 既存のカスタマイズが検出されました:\n", yellow("⚠"))
+			fmt.Println()
+			ui.Warn("既存のカスタマイズが検出されました:")
 
 			// 詳細を表示
 			if len(existing.Desktop.JS) > 0 {
@@ -147,11 +152,16 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 			fmt.Println()
 
 			var confirm bool
-			prompt := &survey.Confirm{
-				Message: "これらのカスタマイズは上書きされます。続行しますか?",
-				Default: false,
-			}
-			if err := survey.AskOne(prompt, &confirm); err != nil {
+			err := ui.NewForm(
+				huh.NewGroup(
+					huh.NewConfirm().
+						Title("これらのカスタマイズは上書きされます。続行しますか?").
+						Affirmative("はい").
+						Negative("いいえ").
+						Value(&confirm),
+				),
+			).Run()
+			if err != nil {
 				return fmt.Errorf("キャンセルされました")
 			}
 			if !confirm {
@@ -179,7 +189,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 			fmt.Println()
 			return fmt.Errorf("JSファイルアップロードエラー: %w", err)
 		}
-		fmt.Printf(" %s\n", green("✓"))
+		fmt.Printf(" %s\n", successStyle.Render("✓"))
 
 		desktopFiles = &kintone.CustomizeFiles{JSFileKey: jsKey}
 
@@ -190,7 +200,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 				fmt.Println()
 				return fmt.Errorf("CSSファイルアップロードエラー: %w", err)
 			}
-			fmt.Printf(" %s\n", green("✓"))
+			fmt.Printf(" %s\n", successStyle.Render("✓"))
 			desktopFiles.CSSFileKey = cssKey
 		}
 	}
@@ -203,7 +213,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 			fmt.Println()
 			return fmt.Errorf("JSファイルアップロードエラー: %w", err)
 		}
-		fmt.Printf(" %s\n", green("✓"))
+		fmt.Printf(" %s\n", successStyle.Render("✓"))
 
 		mobileFiles = &kintone.CustomizeFiles{JSFileKey: jsKey}
 
@@ -214,7 +224,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 				fmt.Println()
 				return fmt.Errorf("CSSファイルアップロードエラー: %w", err)
 			}
-			fmt.Printf(" %s\n", green("✓"))
+			fmt.Printf(" %s\n", successStyle.Render("✓"))
 			mobileFiles.CSSFileKey = cssKey
 		}
 	}
@@ -229,7 +239,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		fmt.Println()
 		return fmt.Errorf("カスタマイズ設定エラー: %w", err)
 	}
-	fmt.Printf(" %s\n", green("✓"))
+	fmt.Printf(" %s\n", successStyle.Render("✓"))
 
 	// アプリをデプロイ（プレビューのみの場合はスキップ）
 	if !previewOnlyDeploy {
@@ -243,13 +253,16 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 			fmt.Println()
 			return fmt.Errorf("デプロイ待機エラー: %w", err)
 		}
-		fmt.Printf(" %s\n", green("✓"))
+		fmt.Printf(" %s\n", successStyle.Render("✓"))
 
-		fmt.Printf("\n%s 完了! https://%s/k/%d/\n\n", green("✓"), cfg.Kintone.Domain, cfg.Kintone.AppID)
+		fmt.Println()
+		ui.Success(fmt.Sprintf("完了! https://%s/k/%d/", cfg.Kintone.Domain, cfg.Kintone.AppID))
+		fmt.Println()
 	} else {
-		yellow := color.New(color.FgYellow).SprintFunc()
-		fmt.Printf("  %s プレビュー環境のみに適用（本番反映はスキップ）\n", yellow("⚠"))
-		fmt.Printf("\n%s プレビュー環境に適用しました! https://%s/k/admin/app/flow?app=%d\n\n", green("✓"), cfg.Kintone.Domain, cfg.Kintone.AppID)
+		ui.Warn("プレビュー環境のみに適用（本番反映はスキップ）")
+		fmt.Println()
+		ui.Success(fmt.Sprintf("プレビュー環境に適用しました! https://%s/k/admin/app/flow?app=%d", cfg.Kintone.Domain, cfg.Kintone.AppID))
+		fmt.Println()
 	}
 
 	return nil
