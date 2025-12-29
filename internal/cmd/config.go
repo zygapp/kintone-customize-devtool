@@ -396,11 +396,24 @@ func editFramework(projectDir string, cfg *config.Config) error {
 	pm := detectPackageManager(projectDir)
 
 	// 1. 旧フレームワークのパッケージをアンインストール
+	// パッケージマネージャーごとのコマンドを設定
+	var removeCmd, addCmd, addDevFlag string
+	switch pm {
+	case "yarn", "pnpm", "bun":
+		removeCmd = "remove"
+		addCmd = "add"
+		addDevFlag = "-D"
+	default: // npm
+		removeCmd = "uninstall"
+		addCmd = "install"
+		addDevFlag = "-D"
+	}
+
 	err = ui.Spinner("旧パッケージを削除中...", func() {
 		oldDeps, oldDevDeps := getFrameworkPackageNames(currentFramework, currentLanguage)
 		allOldPkgs := append(oldDeps, oldDevDeps...)
 		if len(allOldPkgs) > 0 {
-			args := append([]string{"uninstall"}, allOldPkgs...)
+			args := append([]string{removeCmd}, allOldPkgs...)
 			uninstallCmd := exec.Command(pm, args...)
 			uninstallCmd.Dir = projectDir
 			uninstallCmd.Stdout = nil
@@ -419,7 +432,7 @@ func editFramework(projectDir string, cfg *config.Config) error {
 
 	if len(newDeps) > 0 {
 		fmt.Printf("  依存パッケージをインストール中...\n")
-		args := append([]string{"install"}, newDeps...)
+		args := append([]string{addCmd}, newDeps...)
 		installCmd := exec.Command(pm, args...)
 		installCmd.Dir = projectDir
 		installCmd.Stdout = os.Stdout
@@ -431,7 +444,7 @@ func editFramework(projectDir string, cfg *config.Config) error {
 
 	if len(newDevDeps) > 0 {
 		fmt.Printf("  開発パッケージをインストール中...\n")
-		args := append([]string{"install", "-D"}, newDevDeps...)
+		args := append([]string{addCmd, addDevFlag}, newDevDeps...)
 		installCmd := exec.Command(pm, args...)
 		installCmd.Dir = projectDir
 		installCmd.Stdout = os.Stdout
