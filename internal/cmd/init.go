@@ -15,14 +15,18 @@ import (
 )
 
 var (
-	flagDomain    string
-	flagAppID     int
-	flagFramework string
-	flagLanguage  string
-	flagUsername  string
-	flagPassword  string
-	flagCreateDir bool
-	flagNoCreateDir bool
+	flagDomain         string
+	flagAppID          int
+	flagFramework      string
+	flagLanguage       string
+	flagUsername       string
+	flagPassword       string
+	flagCreateDir      bool
+	flagNoCreateDir    bool
+	flagDesktop        bool
+	flagMobile         bool
+	flagPackageManager string
+	flagScope          string
 )
 
 var initCmd = &cobra.Command{
@@ -42,6 +46,10 @@ func init() {
 	initCmd.Flags().StringVarP(&flagPassword, "password", "p", "", "kintone パスワード")
 	initCmd.Flags().BoolVar(&flagCreateDir, "create-dir", false, "プロジェクトディレクトリを作成")
 	initCmd.Flags().BoolVar(&flagNoCreateDir, "no-create-dir", false, "カレントディレクトリに展開")
+	initCmd.Flags().BoolVar(&flagDesktop, "desktop", false, "デスクトップを対象に含める")
+	initCmd.Flags().BoolVar(&flagMobile, "mobile", false, "モバイルを対象に含める")
+	initCmd.Flags().StringVarP(&flagPackageManager, "package-manager", "m", "", "パッケージマネージャー (npm|pnpm|yarn|bun)")
+	initCmd.Flags().StringVarP(&flagScope, "scope", "s", "", "適用範囲 (all|admin|none)")
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
@@ -305,41 +313,74 @@ func collectAnswers(projectDir string, projectName string) (*prompt.InitAnswers,
 
 	// パッケージマネージャー（新規プロジェクトのみ）
 	if !isExisting {
-		pm, err := prompt.AskPackageManager()
-		if err != nil {
-			return nil, err
+		if flagPackageManager != "" {
+			switch flagPackageManager {
+			case "npm":
+				answers.PackageManager = prompt.PackageManagerNpm
+			case "pnpm":
+				answers.PackageManager = prompt.PackageManagerPnpm
+			case "yarn":
+				answers.PackageManager = prompt.PackageManagerYarn
+			case "bun":
+				answers.PackageManager = prompt.PackageManagerBun
+			default:
+				return nil, fmt.Errorf("無効なパッケージマネージャー: %s (npm|pnpm|yarn|bun)", flagPackageManager)
+			}
+		} else {
+			pm, err := prompt.AskPackageManager()
+			if err != nil {
+				return nil, err
+			}
+			answers.PackageManager = pm
 		}
-		answers.PackageManager = pm
 	}
 
 	// カスタマイズ対象（desktop/mobile）
-	defaultDesktop := true
-	defaultMobile := false
-	defaultScope := prompt.ScopeAll
-	if cfg, err := config.Load(projectDir); err == nil {
-		defaultDesktop = cfg.Targets.Desktop
-		defaultMobile = cfg.Targets.Mobile
-		// 既存設定がない場合のデフォルト
-		if !defaultDesktop && !defaultMobile {
-			defaultDesktop = true
+	if flagDesktop || flagMobile {
+		answers.TargetDesktop = flagDesktop
+		answers.TargetMobile = flagMobile
+	} else {
+		defaultDesktop := true
+		defaultMobile := false
+		if cfg, err := config.Load(projectDir); err == nil {
+			defaultDesktop = cfg.Targets.Desktop
+			defaultMobile = cfg.Targets.Mobile
+			// 既存設定がない場合のデフォルト
+			if !defaultDesktop && !defaultMobile {
+				defaultDesktop = true
+			}
 		}
-		if cfg.Scope != "" {
-			defaultScope = prompt.Scope(cfg.Scope)
+		desktop, mobile, err := prompt.AskTargets(defaultDesktop, defaultMobile)
+		if err != nil {
+			return nil, err
 		}
+		answers.TargetDesktop = desktop
+		answers.TargetMobile = mobile
 	}
-	desktop, mobile, err := prompt.AskTargets(defaultDesktop, defaultMobile)
-	if err != nil {
-		return nil, err
-	}
-	answers.TargetDesktop = desktop
-	answers.TargetMobile = mobile
 
 	// カスタマイズの適用範囲
-	scope, err := prompt.AskScope(defaultScope)
-	if err != nil {
-		return nil, err
+	if flagScope != "" {
+		switch flagScope {
+		case "all":
+			answers.Scope = prompt.ScopeAll
+		case "admin":
+			answers.Scope = prompt.ScopeAdmin
+		case "none":
+			answers.Scope = prompt.ScopeNone
+		default:
+			return nil, fmt.Errorf("無効な適用範囲: %s (all|admin|none)", flagScope)
+		}
+	} else {
+		defaultScope := prompt.ScopeAll
+		if cfg, err := config.Load(projectDir); err == nil && cfg.Scope != "" {
+			defaultScope = prompt.Scope(cfg.Scope)
+		}
+		scope, err := prompt.AskScope(defaultScope)
+		if err != nil {
+			return nil, err
+		}
+		answers.Scope = scope
 	}
-	answers.Scope = scope
 
 	return answers, nil
 }

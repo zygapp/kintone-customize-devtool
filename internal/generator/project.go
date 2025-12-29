@@ -104,6 +104,9 @@ func generateIndexHTML(projectDir string, answers *prompt.InitAnswers) error {
 `, appURL, appURL)
 
 	kcdevDir := filepath.Join(projectDir, ".kcdev")
+	if err := os.MkdirAll(kcdevDir, 0755); err != nil {
+		return err
+	}
 	return os.WriteFile(filepath.Join(kcdevDir, "index.html"), []byte(content), 0644)
 }
 
