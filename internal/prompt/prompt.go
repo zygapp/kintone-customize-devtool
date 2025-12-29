@@ -1,6 +1,8 @@
 package prompt
 
 import (
+	"strings"
+
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/fatih/color"
 )
@@ -81,13 +83,22 @@ func AskProjectName(defaultVal string) (string, error) {
 func AskDomain(defaultVal string) (string, error) {
 	var answer string
 	prompt := &survey.Input{
-		Message: "kintone ドメイン (例: example.cybozu.com):",
+		Message: "kintone ドメイン (例: example または example.cybozu.com):",
 		Default: defaultVal,
 	}
 	if err := survey.AskOne(prompt, &answer, survey.WithValidator(survey.Required)); err != nil {
 		return "", err
 	}
-	return answer, nil
+	return CompleteDomain(answer), nil
+}
+
+// CompleteDomain はサブドメインのみの入力を完全なドメインに補完する
+func CompleteDomain(domain string) string {
+	domain = strings.TrimSpace(domain)
+	if !strings.Contains(domain, ".") {
+		return domain + ".cybozu.com"
+	}
+	return domain
 }
 
 func AskAppID(defaultVal int) (int, error) {

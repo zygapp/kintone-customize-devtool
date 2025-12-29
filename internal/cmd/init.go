@@ -220,7 +220,7 @@ func collectAnswers(projectDir string, projectName string) (*prompt.InitAnswers,
 
 	// ドメイン・アプリID
 	if flagDomain != "" && flagAppID > 0 {
-		answers.Domain = flagDomain
+		answers.Domain = prompt.CompleteDomain(flagDomain)
 		answers.AppID = flagAppID
 	} else if meta != nil && meta.Kintone.Domain != "" && meta.Kintone.AppID > 0 {
 		answers.Domain = meta.Kintone.Domain
@@ -230,7 +230,7 @@ func collectAnswers(projectDir string, projectName string) (*prompt.InitAnswers,
 		answers.AppID = cfg.Kintone.AppID
 	} else {
 		if flagDomain != "" {
-			answers.Domain = flagDomain
+			answers.Domain = prompt.CompleteDomain(flagDomain)
 		} else {
 			domain, err := prompt.AskDomain("")
 			if err != nil {
