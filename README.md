@@ -1,6 +1,6 @@
 <div align="center">
 
-# kcdev
+# @zygapp/kintone-customize-devtool
 
 **kintone カスタマイズ開発を超簡単に**
 
@@ -25,6 +25,7 @@ Vite + HMR で kintone カスタマイズ開発を快適に。<br />
 | **Hot Module Replacement** | コード変更が即座に kintone 画面に反映。ページリロード不要。 |
 | **モダンフレームワーク対応** | React / Vue / Svelte / Vanilla に対応 |
 | **TypeScript サポート** | 型安全な開発環境を標準提供 |
+| **ESLint 統合** | フレームワークに応じた ESLint 設定を自動生成 |
 | **シンプルなワークフロー** | `init` → `dev` → `build` → `deploy` の 4 ステップ |
 | **クロスプラットフォーム** | macOS / Linux / Windows（Intel & ARM） |
 
@@ -84,12 +85,17 @@ kcdev init my-app
 
 | オプション | 説明 |
 |-----------|------|
-| `-d, --domain` | kintone ドメイン |
+| `-d, --domain` | kintone ドメイン（自動補完対応） |
 | `-a, --app` | アプリ ID |
 | `-f, --framework` | フレームワーク（react / vue / svelte / vanilla） |
 | `-l, --language` | 言語（typescript / javascript） |
+| `-o, --output` | 出力ファイル名（拡張子なし、デフォルト: customize） |
 | `-u, --username` | kintone ユーザー名 |
 | `-p, --password` | kintone パスワード |
+| `-m, --package-manager` | パッケージマネージャー（npm / pnpm / yarn / bun） |
+| `--desktop` | デスクトップを対象に含める |
+| `--mobile` | モバイルを対象に含める |
+| `-s, --scope` | 適用範囲（all / admin / none） |
 | `--create-dir` | プロジェクトディレクトリを作成 |
 | `--no-create-dir` | カレントディレクトリに展開 |
 
@@ -118,22 +124,33 @@ kcdev dev
 
 `console.error` 以外の `console.*` と `debugger` は自動的に削除されます。
 
+ビルド前にバージョン更新の確認が表示されます（パッチ / マイナー / メジャー / カスタム）。
+
 ```bash
 kcdev build
 ```
 
+**オプション:**
+
+| オプション | 説明 |
+|-----------|------|
+| `--no-minify` | minify を無効化（デバッグ用） |
+| `--skip-version` | バージョン確認をスキップ |
+
 **出力ファイル:**
-- `dist/customize.js`
+- `dist/customize.js`（または設定した出力ファイル名）
 - `dist/customize.css`（CSS がある場合）
 
 ### `kcdev deploy`
 
 ビルド成果物を kintone にデプロイします。
 
+`dist/` が存在しない場合は自動でビルドを実行します。存在する場合は再ビルドするか確認が表示されます。
+
 既存のカスタマイズがある場合は確認プロンプトが表示されます。
 
 ```bash
-kcdev build && kcdev deploy
+kcdev deploy
 ```
 
 **オプション:**
@@ -142,6 +159,7 @@ kcdev build && kcdev deploy
 |-----------|------|
 | `-f, --force` | 既存カスタマイズの確認をスキップして上書き |
 | `-p, --preview` | プレビュー環境のみにデプロイ（本番反映しない） |
+| `--skip-version` | バージョン確認をスキップ |
 
 ### `kcdev types`
 
@@ -154,6 +172,22 @@ kcdev types
 @kintone/dts-gen を使用して `src/types/kintone.d.ts` を生成します。
 
 **Note:** TypeScript プロジェクトでは、`kcdev init` 実行時に自動的に型定義が生成されます。フィールドを追加・変更した場合は、このコマンドで再生成してください。
+
+### `kcdev config`
+
+対話形式でプロジェクト設定を変更します。
+
+```bash
+kcdev config
+```
+
+**設定可能な項目:**
+- kintone 接続設定（ドメイン、アプリ ID、認証情報）
+- ターゲット（デスクトップ / モバイル）
+- 適用範囲（ALL / ADMIN / NONE）
+- 出力ファイル名
+- エントリーファイル
+- フレームワーク変更（依存パッケージの入れ替え、設定ファイルの再生成を自動実行）
 
 ### `kcdev update`
 
@@ -176,6 +210,8 @@ my-app/
 ├── .kcdev/
 │   ├── config.json       # 設定ファイル
 │   ├── vite.config.ts    # Vite 設定（自動生成）
+│   ├── eslint.config.js  # ESLint 設定（自動生成）
+│   ├── index.html        # 開発用 HTML
 │   ├── certs/            # SSL 証明書
 │   └── managed/          # ローダー（自動生成）
 ├── dist/                 # ビルド出力

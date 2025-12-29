@@ -52,13 +52,18 @@ type FilesMeta struct {
 }
 
 func GenerateLoader(projectDir string, answers *prompt.InitAnswers) error {
+	return RegenerateLoader(projectDir, answers.Framework, answers.Language, answers.Output, answers.ProjectName, answers.Domain, answers.AppID)
+}
+
+// RegenerateLoader はローダーを再生成する（フレームワーク変更時などに使用）
+func RegenerateLoader(projectDir string, framework prompt.Framework, language prompt.Language, output, projectName, domain string, appID int) error {
 	managedDir := filepath.Join(projectDir, config.ConfigDir, "managed")
 	if err := os.MkdirAll(managedDir, 0755); err != nil {
 		return err
 	}
 
-	entry := GetEntryPath(answers.Framework, answers.Language)
-	outputName := answers.Output
+	entry := GetEntryPath(framework, language)
+	outputName := output
 	if outputName == "" {
 		outputName = "customize"
 	}
@@ -80,13 +85,13 @@ func GenerateLoader(projectDir string, answers *prompt.InitAnswers) error {
 			Entry:  entry,
 		},
 		Project: ProjectMeta{
-			Name:      answers.ProjectName,
-			Framework: string(answers.Framework),
-			Language:  string(answers.Language),
+			Name:      projectName,
+			Framework: string(framework),
+			Language:  string(language),
 		},
 		Kintone: KintoneMeta{
-			Domain: answers.Domain,
-			AppID:  answers.AppID,
+			Domain: domain,
+			AppID:  appID,
 		},
 		Files: FilesMeta{
 			LoaderPath:   ".kcdev/managed/kintone-dev-loader.js",

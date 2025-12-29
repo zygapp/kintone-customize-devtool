@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/kintone/kcdev/internal/config"
 	"github.com/kintone/kcdev/internal/kintone"
 	"github.com/kintone/kcdev/internal/ui"
@@ -56,8 +55,6 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("認証情報が見つかりません。.env または .kcdev/config.json に設定してください")
 	}
 
-	successStyle := lipgloss.NewStyle().Foreground(ui.ColorGreen)
-
 	// 設定から出力ファイル名を取得
 	outputName := cfg.GetOutputName()
 
@@ -102,25 +99,6 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	// ビルド成果物の確認
 	if _, err := os.Stat(jsPath); err != nil {
 		return fmt.Errorf("ビルド成果物が見つかりません")
-	}
-
-	// ターゲット表示用の文字列を生成
-	var targets []string
-	if cfg.Targets.Desktop {
-		targets = append(targets, "デスクトップ")
-	}
-	if cfg.Targets.Mobile {
-		targets = append(targets, "モバイル")
-	}
-	if len(targets) == 0 {
-		targets = append(targets, "デスクトップ") // デフォルト
-	}
-
-	fmt.Println()
-	if previewOnlyDeploy {
-		ui.Info(fmt.Sprintf("プレビュー環境にデプロイ中... (%s, App:%d, %s)", cfg.Kintone.Domain, cfg.Kintone.AppID, strings.Join(targets, "+")))
-	} else {
-		ui.Info(fmt.Sprintf("デプロイ中... (%s, App:%d, %s)", cfg.Kintone.Domain, cfg.Kintone.AppID, strings.Join(targets, "+")))
 	}
 
 	client := kintone.NewClient(cfg.Kintone.Domain, username, password)
@@ -178,92 +156,90 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		hasCss = true
 	}
 
-	var desktopFiles *kintone.CustomizeFiles
-	var mobileFiles *kintone.CustomizeFiles
+	// スピナーでデプロイ処理
+	spinnerTitle := "デプロイ中..."
+	if previewOnlyDeploy {
+		spinnerTitle = "プレビュー環境にデプロイ中..."
+	}
 
-	// デスクトップ用ファイルをアップロード
-	if cfg.Targets.Desktop {
-		fmt.Printf("  デスクトップ JS...")
-		jsKey, err := client.UploadFile(jsPath)
-		if err != nil {
-			fmt.Println()
-			return fmt.Errorf("JSファイルアップロードエラー: %w", err)
-		}
-		fmt.Printf(" %s\n", successStyle.Render("✓"))
+	var deployErr error
+	ui.Spinner(spinnerTitle, func() {
+		var desktopFiles *kintone.CustomizeFiles
+		var mobileFiles *kintone.CustomizeFiles
 
-		desktopFiles = &kintone.CustomizeFiles{JSFileKey: jsKey}
-
-		if hasCss {
-			fmt.Printf("  デスクトップ CSS...")
-			cssKey, err := client.UploadFile(cssPath)
+		// デスクトップ用ファイルをアップロード
+		if cfg.Targets.Desktop {
+			jsKey, err := client.UploadFile(jsPath)
 			if err != nil {
-				fmt.Println()
-				return fmt.Errorf("CSSファイルアップロードエラー: %w", err)
+				deployErr = fmt.Errorf("JSファイルアップロードエラー: %w", err)
+				return
 			}
-			fmt.Printf(" %s\n", successStyle.Render("✓"))
-			desktopFiles.CSSFileKey = cssKey
+			desktopFiles = &kintone.CustomizeFiles{JSFileKey: jsKey}
+
+			if hasCss {
+				cssKey, err := client.UploadFile(cssPath)
+				if err != nil {
+					deployErr = fmt.Errorf("CSSファイルアップロードエラー: %w", err)
+					return
+				}
+				desktopFiles.CSSFileKey = cssKey
+			}
 		}
-	}
 
-	// モバイル用ファイルをアップロード
-	if cfg.Targets.Mobile {
-		fmt.Printf("  モバイル JS...")
-		jsKey, err := client.UploadFile(jsPath)
-		if err != nil {
-			fmt.Println()
-			return fmt.Errorf("JSファイルアップロードエラー: %w", err)
-		}
-		fmt.Printf(" %s\n", successStyle.Render("✓"))
-
-		mobileFiles = &kintone.CustomizeFiles{JSFileKey: jsKey}
-
-		if hasCss {
-			fmt.Printf("  モバイル CSS...")
-			cssKey, err := client.UploadFile(cssPath)
+		// モバイル用ファイルをアップロード
+		if cfg.Targets.Mobile {
+			jsKey, err := client.UploadFile(jsPath)
 			if err != nil {
-				fmt.Println()
-				return fmt.Errorf("CSSファイルアップロードエラー: %w", err)
+				deployErr = fmt.Errorf("JSファイルアップロードエラー: %w", err)
+				return
 			}
-			fmt.Printf(" %s\n", successStyle.Render("✓"))
-			mobileFiles.CSSFileKey = cssKey
+			mobileFiles = &kintone.CustomizeFiles{JSFileKey: jsKey}
+
+			if hasCss {
+				cssKey, err := client.UploadFile(cssPath)
+				if err != nil {
+					deployErr = fmt.Errorf("CSSファイルアップロードエラー: %w", err)
+					return
+				}
+				mobileFiles.CSSFileKey = cssKey
+			}
 		}
+
+		// カスタマイズ設定を更新
+		scope := kintone.CustomizeScope(cfg.Scope)
+		if scope == "" {
+			scope = kintone.ScopeAll
+		}
+		if err := client.UpdateCustomize(cfg.Kintone.AppID, desktopFiles, mobileFiles, scope); err != nil {
+			deployErr = fmt.Errorf("カスタマイズ設定エラー: %w", err)
+			return
+		}
+
+		// アプリをデプロイ（プレビューのみの場合はスキップ）
+		if !previewOnlyDeploy {
+			if err := client.DeployApp(cfg.Kintone.AppID); err != nil {
+				deployErr = fmt.Errorf("デプロイ開始エラー: %w", err)
+				return
+			}
+
+			if err := client.WaitForDeploy(cfg.Kintone.AppID); err != nil {
+				deployErr = fmt.Errorf("デプロイ待機エラー: %w", err)
+				return
+			}
+		}
+	})
+
+	if deployErr != nil {
+		return deployErr
 	}
 
-	// カスタマイズ設定を更新
-	fmt.Printf("  設定...")
-	scope := kintone.CustomizeScope(cfg.Scope)
-	if scope == "" {
-		scope = kintone.ScopeAll
-	}
-	if err := client.UpdateCustomize(cfg.Kintone.AppID, desktopFiles, mobileFiles, scope); err != nil {
-		fmt.Println()
-		return fmt.Errorf("カスタマイズ設定エラー: %w", err)
-	}
-	fmt.Printf(" %s\n", successStyle.Render("✓"))
-
-	// アプリをデプロイ（プレビューのみの場合はスキップ）
 	if !previewOnlyDeploy {
-		fmt.Printf("  デプロイ...")
-		if err := client.DeployApp(cfg.Kintone.AppID); err != nil {
-			fmt.Println()
-			return fmt.Errorf("デプロイ開始エラー: %w", err)
-		}
-
-		if err := client.WaitForDeploy(cfg.Kintone.AppID); err != nil {
-			fmt.Println()
-			return fmt.Errorf("デプロイ待機エラー: %w", err)
-		}
-		fmt.Printf(" %s\n", successStyle.Render("✓"))
-
-		fmt.Println()
 		ui.Success(fmt.Sprintf("完了! https://%s/k/%d/", cfg.Kintone.Domain, cfg.Kintone.AppID))
-		fmt.Println()
 	} else {
 		ui.Warn("プレビュー環境のみに適用（本番反映はスキップ）")
-		fmt.Println()
 		ui.Success(fmt.Sprintf("プレビュー環境に適用しました! https://%s/k/admin/app/flow?app=%d", cfg.Kintone.Domain, cfg.Kintone.AppID))
-		fmt.Println()
 	}
+	fmt.Println()
 
 	return nil
 }

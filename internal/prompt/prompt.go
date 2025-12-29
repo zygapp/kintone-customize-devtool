@@ -191,22 +191,35 @@ func AskAppID(defaultVal int) (int, error) {
 }
 
 func AskFramework() (Framework, error) {
+	return AskFrameworkExcept("")
+}
+
+func AskFrameworkExcept(exclude Framework) (Framework, error) {
 	cyanStyle := lipgloss.NewStyle().Foreground(colorCyan)
 	greenStyle := lipgloss.NewStyle().Foreground(colorGreen)
 	orangeStyle := lipgloss.NewStyle().Foreground(colorOrange)
 	yellowStyle := lipgloss.NewStyle().Foreground(colorYellow)
+
+	var options []huh.Option[Framework]
+	if exclude != FrameworkReact {
+		options = append(options, huh.NewOption(cyanStyle.Render("React"), FrameworkReact))
+	}
+	if exclude != FrameworkVue {
+		options = append(options, huh.NewOption(greenStyle.Render("Vue"), FrameworkVue))
+	}
+	if exclude != FrameworkSvelte {
+		options = append(options, huh.NewOption(orangeStyle.Render("Svelte"), FrameworkSvelte))
+	}
+	if exclude != FrameworkVanilla {
+		options = append(options, huh.NewOption(yellowStyle.Render("Vanilla"), FrameworkVanilla))
+	}
 
 	var answer Framework
 	err := newForm(
 		huh.NewGroup(
 			huh.NewSelect[Framework]().
 				Title("フレームワーク").
-				Options(
-					huh.NewOption(cyanStyle.Render("React"), FrameworkReact),
-					huh.NewOption(greenStyle.Render("Vue"), FrameworkVue),
-					huh.NewOption(orangeStyle.Render("Svelte"), FrameworkSvelte),
-					huh.NewOption(yellowStyle.Render("Vanilla"), FrameworkVanilla),
-				).
+				Options(options...).
 				Value(&answer),
 		),
 	).Run()

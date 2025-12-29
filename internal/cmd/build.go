@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/kintone/kcdev/internal/config"
 	"github.com/kintone/kcdev/internal/ui"
 	"github.com/spf13/cobra"
@@ -46,8 +45,6 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("設定ファイルが見つかりません。kcdev init を実行してください: %w", err)
 	}
 
-	infoStyle := lipgloss.NewStyle().Foreground(ui.ColorCyan)
-
 	// バージョン確認（スキップフラグがない場合）
 	if !skipVersion {
 		pkg, err := loadPackageJSON(projectDir)
@@ -71,29 +68,27 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	fmt.Println()
-	ui.Info("ビルドを開始...")
-
 	viteConfig := filepath.Join(projectDir, config.ConfigDir, "vite.config.ts")
 	if _, err := os.Stat(filepath.Join(projectDir, "vite.config.ts")); err == nil {
 		viteConfig = filepath.Join(projectDir, "vite.config.ts")
 	}
-
-	fmt.Printf("%s バンドル中...\n", infoStyle.Render("○"))
 
 	viteArgs := []string{"vite", "build", "--config", viteConfig, "--logLevel", "silent"}
 	if noMinify {
 		viteArgs = append(viteArgs, "--minify", "false")
 	}
 
-	viteCmd := exec.Command("npx", viteArgs...)
-	viteCmd.Dir = projectDir
+	var buildErr error
+	var buildOutput []byte
+	ui.Spinner("ビルド中...", func() {
+		viteCmd := exec.Command("npx", viteArgs...)
+		viteCmd.Dir = projectDir
+		buildOutput, buildErr = viteCmd.CombinedOutput()
+	})
 
-	// エラー出力のみキャプチャ
-	output, err := viteCmd.CombinedOutput()
-	if err != nil {
-		fmt.Printf("%s\n", string(output))
-		return fmt.Errorf("ビルドエラー: %w", err)
+	if buildErr != nil {
+		fmt.Printf("%s\n", string(buildOutput))
+		return fmt.Errorf("ビルドエラー: %w", buildErr)
 	}
 
 	// 設定から出力ファイル名を取得
@@ -139,9 +134,7 @@ func savePackageJSON(projectDir string, pkg map[string]interface{}) error {
 }
 
 func askVersionUpdate(currentVersion string) (string, error) {
-	infoStyle := lipgloss.NewStyle().Foreground(ui.ColorCyan)
-
-	fmt.Printf("現在のバージョン: %s\n", infoStyle.Render(currentVersion))
+	fmt.Printf("現在のバージョン: %s\n", currentVersion)
 
 	// まずバージョンを更新するか確認
 	var updateVersion bool

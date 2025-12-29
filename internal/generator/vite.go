@@ -30,6 +30,7 @@ import fs from 'fs'
 import path from 'path'
 
 const projectRoot = path.resolve(__dirname, '..')
+const kcdevDir = __dirname
 const certDir = path.resolve(__dirname, 'certs')
 const srcEntry = path.resolve(__dirname, '..%s')
 
@@ -38,15 +39,22 @@ const configPath = path.resolve(__dirname, 'config.json')
 const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
 const outputName = config.output || 'customize'
 
-// プロジェクトルートにindex.htmlがあれば従来動作、なければ.kcdev/をroot
+// プロジェクトルートにindex.htmlがあるか確認
 const hasRootIndexHtml = fs.existsSync(path.join(projectRoot, 'index.html'))
-const viteRoot = hasRootIndexHtml ? projectRoot : __dirname
 
 let cachedBundle: string | null = null
 
 const kcdevPlugin = {
   name: 'kcdev',
   configureServer(server) {
+    // src/ ディレクトリの変更を検知してフルリロード
+    server.watcher.on('change', (file) => {
+      if (file.includes('/src/')) {
+        cachedBundle = null
+        server.ws.send({ type: 'full-reload' })
+      }
+    })
+
     // CORS/PNA ヘッダー
     server.middlewares.use((req, res, next) => {
       res.setHeader('Access-Control-Allow-Origin', '*')
@@ -61,6 +69,22 @@ const kcdevPlugin = {
       }
       next()
     })
+
+    // プロジェクトルートにindex.htmlがない場合、.kcdev/index.htmlを返す
+    if (!hasRootIndexHtml) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url === '/' || req.url === '/index.html') {
+          const indexPath = path.join(kcdevDir, 'index.html')
+          fs.readFile(indexPath, 'utf-8', (err, html) => {
+            if (err) return next()
+            res.setHeader('Content-Type', 'text/html')
+            res.end(html)
+          })
+          return
+        }
+        next()
+      })
+    }
 
     // /${outputName}.js - Vite でリアルタイムバンドル
     server.middlewares.use(async (req, res, next) => {
@@ -118,16 +142,10 @@ const kcdevPlugin = {
       }
     })
   },
-  // ソース変更時にフルリロード
-  handleHotUpdate({ server }) {
-    cachedBundle = null
-    server.ws.send({ type: 'full-reload' })
-    return []
-  },
 }
 
 export default defineConfig({
-  root: viteRoot,
+  root: projectRoot,
   plugins: [%skcdevPlugin],
   server: {
     https: {

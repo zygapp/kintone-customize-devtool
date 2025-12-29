@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -45,6 +47,9 @@ func runConfig(cmd *cobra.Command, args []string) error {
 
 		action, err := askConfigAction()
 		if err != nil {
+			if errors.Is(err, huh.ErrUserAborted) {
+				return nil
+			}
 			return err
 		}
 
@@ -53,6 +58,9 @@ func runConfig(cmd *cobra.Command, args []string) error {
 			showCurrentConfig(cfg)
 		case "kintone":
 			if err := editKintoneConfig(cfg); err != nil {
+				if errors.Is(err, huh.ErrUserAborted) {
+					continue
+				}
 				return err
 			}
 			if err := cfg.Save(cwd); err != nil {
@@ -60,6 +68,9 @@ func runConfig(cmd *cobra.Command, args []string) error {
 			}
 		case "targets":
 			if err := editTargets(cfg); err != nil {
+				if errors.Is(err, huh.ErrUserAborted) {
+					continue
+				}
 				return err
 			}
 			if err := cfg.Save(cwd); err != nil {
@@ -67,13 +78,19 @@ func runConfig(cmd *cobra.Command, args []string) error {
 			}
 		case "scope":
 			if err := editScope(cfg); err != nil {
+				if errors.Is(err, huh.ErrUserAborted) {
+					continue
+				}
 				return err
 			}
 			if err := cfg.Save(cwd); err != nil {
 				return err
 			}
 		case "output":
-			if err := editOutput(cfg); err != nil {
+			if err := editOutput(cwd, cfg); err != nil {
+				if errors.Is(err, huh.ErrUserAborted) {
+					continue
+				}
 				return err
 			}
 			if err := cfg.Save(cwd); err != nil {
@@ -81,6 +98,9 @@ func runConfig(cmd *cobra.Command, args []string) error {
 			}
 		case "entry":
 			if err := editEntry(cwd, cfg); err != nil {
+				if errors.Is(err, huh.ErrUserAborted) {
+					continue
+				}
 				return err
 			}
 			if err := cfg.Save(cwd); err != nil {
@@ -88,6 +108,9 @@ func runConfig(cmd *cobra.Command, args []string) error {
 			}
 		case "framework":
 			if err := editFramework(cwd, cfg); err != nil {
+				if errors.Is(err, huh.ErrUserAborted) {
+					continue
+				}
 				return err
 			}
 			if err := cfg.Save(cwd); err != nil {
@@ -278,7 +301,7 @@ func editScope(cfg *config.Config) error {
 	return nil
 }
 
-func editOutput(cfg *config.Config) error {
+func editOutput(projectDir string, cfg *config.Config) error {
 	fmt.Println()
 
 	output, err := prompt.AskOutput(cfg.GetOutputName())
@@ -287,6 +310,13 @@ func editOutput(cfg *config.Config) error {
 	}
 
 	cfg.Output = output
+
+	// ローダーを再生成
+	currentFramework := detectCurrentFramework(projectDir)
+	currentLanguage := detectCurrentLanguage(projectDir)
+	if err := generator.RegenerateLoader(projectDir, currentFramework, currentLanguage, output, cfg.GetOutputName(), cfg.Kintone.Domain, cfg.Kintone.AppID); err != nil {
+		return fmt.Errorf("ローダー再生成エラー: %w", err)
+	}
 
 	fmt.Println()
 	ui.Success(fmt.Sprintf("出力ファイル名を更新しました (%s.js / %s.css)", output, output))
@@ -359,18 +389,10 @@ func editFramework(projectDir string, cfg *config.Config) error {
 
 	fmt.Printf("現在のフレームワーク: %s (%s)\n\n", infoStyle.Render(string(currentFramework)), string(currentLanguage))
 
-	// 新しいフレームワークを選択
-	newFramework, err := prompt.AskFramework()
+	// 新しいフレームワークを選択（現在のフレームワークは除外）
+	newFramework, err := prompt.AskFrameworkExcept(currentFramework)
 	if err != nil {
 		return err
-	}
-
-	if newFramework == currentFramework {
-		fmt.Println()
-		ui.Warn("フレームワークは変更されていません")
-		fmt.Println("Enterキーで戻る...")
-		fmt.Scanln()
-		return nil
 	}
 
 	// 確認
@@ -409,51 +431,53 @@ func editFramework(projectDir string, cfg *config.Config) error {
 		addDevFlag = "-D"
 	}
 
-	err = ui.Spinner("旧パッケージを削除中...", func() {
-		oldDeps, oldDevDeps := getFrameworkPackageNames(currentFramework, currentLanguage)
-		allOldPkgs := append(oldDeps, oldDevDeps...)
-		if len(allOldPkgs) > 0 {
-			args := append([]string{removeCmd}, allOldPkgs...)
-			uninstallCmd := exec.Command(pm, args...)
-			uninstallCmd.Dir = projectDir
-			uninstallCmd.Stdout = nil
-			uninstallCmd.Stderr = nil
-			uninstallCmd.Run() // エラーは無視（パッケージがない場合もある）
-		}
-	})
-	if err != nil {
-		return err
+	// 新フレームワーク以外の全フレームワーク関連パッケージを削除
+	allOldPkgs := getAllFrameworkPackagesExcept(newFramework)
+	existingPkgs := filterExistingPackages(projectDir, allOldPkgs)
+	if len(existingPkgs) > 0 {
+		ui.Spinner("旧パッケージを削除中...", func() {
+			args := append([]string{removeCmd}, existingPkgs...)
+			cmd := exec.Command(pm, args...)
+			cmd.Dir = projectDir
+			cmd.Run()
+		})
+		ui.Success("旧パッケージを削除しました")
 	}
-	ui.Success("旧パッケージを削除しました")
 
 	// 2. 新フレームワークのパッケージをインストール
 	fmt.Println()
 	newDeps, newDevDeps := getFrameworkPackageNames(newFramework, currentLanguage)
+	allNewPkgs := append(newDeps, newDevDeps...)
 
-	if len(newDeps) > 0 {
-		fmt.Printf("  依存パッケージをインストール中...\n")
-		args := append([]string{addCmd}, newDeps...)
-		installCmd := exec.Command(pm, args...)
-		installCmd.Dir = projectDir
-		installCmd.Stdout = os.Stdout
-		installCmd.Stderr = os.Stderr
-		if err := installCmd.Run(); err != nil {
-			return fmt.Errorf("依存パッケージインストールエラー: %w", err)
+	if len(allNewPkgs) > 0 {
+		var installErr error
+		ui.Spinner("新パッケージをインストール中...", func() {
+			// deps
+			if len(newDeps) > 0 {
+				args := append([]string{addCmd}, newDeps...)
+				cmd := exec.Command(pm, args...)
+				cmd.Dir = projectDir
+				if err := cmd.Run(); err != nil {
+					installErr = fmt.Errorf("依存パッケージインストールエラー: %w", err)
+					return
+				}
+			}
+			// devDeps
+			if len(newDevDeps) > 0 {
+				args := append([]string{addCmd, addDevFlag}, newDevDeps...)
+				cmd := exec.Command(pm, args...)
+				cmd.Dir = projectDir
+				if err := cmd.Run(); err != nil {
+					installErr = fmt.Errorf("開発パッケージインストールエラー: %w", err)
+					return
+				}
+			}
+		})
+		if installErr != nil {
+			return installErr
 		}
+		ui.Success("新パッケージをインストールしました")
 	}
-
-	if len(newDevDeps) > 0 {
-		fmt.Printf("  開発パッケージをインストール中...\n")
-		args := append([]string{addCmd, addDevFlag}, newDevDeps...)
-		installCmd := exec.Command(pm, args...)
-		installCmd.Dir = projectDir
-		installCmd.Stdout = os.Stdout
-		installCmd.Stderr = os.Stderr
-		if err := installCmd.Run(); err != nil {
-			return fmt.Errorf("開発パッケージインストールエラー: %w", err)
-		}
-	}
-	ui.Success("新パッケージをインストールしました")
 
 	// 3. vite.config.ts を再生成
 	err = ui.SpinnerWithResult("vite.config.ts を再生成中...", func() error {
@@ -473,7 +497,16 @@ func editFramework(projectDir string, cfg *config.Config) error {
 	}
 	ui.Success("eslint.config.js を再生成しました")
 
-	// 5. config.json のエントリーパスを更新
+	// 5. ローダーを再生成
+	err = ui.SpinnerWithResult("ローダーを再生成中...", func() error {
+		return generator.RegenerateLoader(projectDir, newFramework, currentLanguage, cfg.Output, cfg.GetOutputName(), cfg.Kintone.Domain, cfg.Kintone.AppID)
+	})
+	if err != nil {
+		return fmt.Errorf("ローダー再生成エラー: %w", err)
+	}
+	ui.Success("ローダーを再生成しました")
+
+	// 6. config.json のエントリーパスを更新
 	cfg.Dev.Entry = generator.GetEntryPath(newFramework, currentLanguage)
 
 	fmt.Println()
@@ -518,6 +551,55 @@ func detectCurrentLanguage(projectDir string) prompt.Language {
 		return prompt.LanguageTypeScript
 	}
 	return prompt.LanguageJavaScript
+}
+
+// filterExistingPackages は package.json に存在するパッケージのみを返す
+func filterExistingPackages(projectDir string, pkgs []string) []string {
+	pkgPath := filepath.Join(projectDir, "package.json")
+	data, err := os.ReadFile(pkgPath)
+	if err != nil {
+		return nil
+	}
+
+	var pkg map[string]interface{}
+	if err := json.Unmarshal(data, &pkg); err != nil {
+		return nil
+	}
+
+	deps, _ := pkg["dependencies"].(map[string]interface{})
+	devDeps, _ := pkg["devDependencies"].(map[string]interface{})
+
+	var existing []string
+	for _, p := range pkgs {
+		if _, ok := deps[p]; ok {
+			existing = append(existing, p)
+		} else if _, ok := devDeps[p]; ok {
+			existing = append(existing, p)
+		}
+	}
+	return existing
+}
+
+// getAllFrameworkPackagesExcept は指定フレームワーク以外の全フレームワーク関連パッケージを返す
+func getAllFrameworkPackagesExcept(excludeFw prompt.Framework) []string {
+	var pkgs []string
+
+	// React (言語に関係なく全て含める)
+	if excludeFw != prompt.FrameworkReact {
+		pkgs = append(pkgs, "react", "react-dom", "@vitejs/plugin-react", "eslint-plugin-react-hooks", "@types/react", "@types/react-dom")
+	}
+
+	// Vue
+	if excludeFw != prompt.FrameworkVue {
+		pkgs = append(pkgs, "vue", "@vitejs/plugin-vue", "eslint-plugin-vue", "vue-tsc")
+	}
+
+	// Svelte
+	if excludeFw != prompt.FrameworkSvelte {
+		pkgs = append(pkgs, "svelte", "@sveltejs/vite-plugin-svelte", "eslint-plugin-svelte", "svelte-check", "tslib")
+	}
+
+	return pkgs
 }
 
 // getFrameworkPackageNames はフレームワーク固有のパッケージ名リストを返す（バージョンなし）

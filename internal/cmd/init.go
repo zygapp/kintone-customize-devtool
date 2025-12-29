@@ -153,34 +153,48 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// 新規プロジェクトの場合、パッケージをインストール
 	if !isExisting && answers.PackageManager != "" {
 		fmt.Println()
-		ui.Info(fmt.Sprintf("パッケージをインストール中... (%s)", answers.PackageManager))
-
 		deps, devDeps := generator.GetPackageList(answers.Framework, answers.Language)
 		pm := string(answers.PackageManager)
 
-		// dependencies をインストール
-		if len(deps) > 0 {
-			args := append([]string{"install"}, deps...)
-			installCmd := exec.Command(pm, args...)
-			installCmd.Dir = projectDir
-			installCmd.Stdout = os.Stdout
-			installCmd.Stderr = os.Stderr
-			if err := installCmd.Run(); err != nil {
-				return fmt.Errorf("依存パッケージインストールエラー: %w", err)
-			}
+		// パッケージマネージャーごとのコマンドを設定
+		var addCmd, addDevFlag string
+		switch pm {
+		case "yarn", "pnpm", "bun":
+			addCmd = "add"
+			addDevFlag = "-D"
+		default: // npm
+			addCmd = "install"
+			addDevFlag = "-D"
 		}
 
-		// devDependencies をインストール
-		if len(devDeps) > 0 {
-			args := append([]string{"install", "-D"}, devDeps...)
-			installCmd := exec.Command(pm, args...)
-			installCmd.Dir = projectDir
-			installCmd.Stdout = os.Stdout
-			installCmd.Stderr = os.Stderr
-			if err := installCmd.Run(); err != nil {
-				return fmt.Errorf("開発パッケージインストールエラー: %w", err)
+		var installErr error
+		ui.Spinner("パッケージをインストール中...", func() {
+			// dependencies をインストール
+			if len(deps) > 0 {
+				args := append([]string{addCmd}, deps...)
+				cmd := exec.Command(pm, args...)
+				cmd.Dir = projectDir
+				if err := cmd.Run(); err != nil {
+					installErr = fmt.Errorf("依存パッケージインストールエラー: %w", err)
+					return
+				}
 			}
+
+			// devDependencies をインストール
+			if len(devDeps) > 0 {
+				args := append([]string{addCmd, addDevFlag}, devDeps...)
+				cmd := exec.Command(pm, args...)
+				cmd.Dir = projectDir
+				if err := cmd.Run(); err != nil {
+					installErr = fmt.Errorf("開発パッケージインストールエラー: %w", err)
+					return
+				}
+			}
+		})
+		if installErr != nil {
+			return installErr
 		}
+		ui.Success("パッケージをインストールしました")
 
 		// TypeScript の場合、型定義を生成
 		if answers.Language == prompt.LanguageTypeScript {

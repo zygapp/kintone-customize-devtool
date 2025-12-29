@@ -110,7 +110,16 @@ func runDev(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
-	return viteCmd.Wait()
+	err = viteCmd.Wait()
+	// シグナルによる終了は正常終了扱い
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr.ExitCode() == -1 || exitErr.ProcessState.String() == "signal: terminated" {
+				return nil
+			}
+		}
+	}
+	return err
 }
 
 func openBrowser(url string) error {
@@ -129,15 +138,6 @@ func openBrowser(url string) error {
 }
 
 func deployLoader(projectDir string, cfg *config.Config, username, password string, force bool, previewOnly bool) error {
-	successStyle := lipgloss.NewStyle().Foreground(ui.ColorGreen)
-
-	fmt.Println()
-	if previewOnly {
-		ui.Info("ローダーをkintoneプレビュー環境にデプロイ中...")
-	} else {
-		ui.Info("ローダーをkintoneにデプロイ中...")
-	}
-
 	client := kintone.NewClient(cfg.Kintone.Domain, username, password)
 	loaderPath := filepath.Join(projectDir, config.ConfigDir, "managed", "kintone-dev-loader.js")
 
@@ -188,59 +188,66 @@ func deployLoader(projectDir string, cfg *config.Config, username, password stri
 		}
 	}
 
-	var desktopFiles *kintone.CustomizeFiles
-	var mobileFiles *kintone.CustomizeFiles
-
-	// デスクトップ用ローダーをアップロード
-	if cfg.Targets.Desktop {
-		fmt.Printf("  デスクトップ アップロード...")
-		fileKey, err := client.UploadFile(loaderPath)
-		if err != nil {
-			fmt.Println()
-			return fmt.Errorf("ローダーアップロードエラー: %w", err)
-		}
-		fmt.Printf(" %s\n", successStyle.Render("✓"))
-		desktopFiles = &kintone.CustomizeFiles{JSFileKey: fileKey}
+	// スピナーでデプロイ処理
+	spinnerTitle := "ローダーをkintoneにデプロイ中..."
+	if previewOnly {
+		spinnerTitle = "ローダーをkintoneプレビュー環境にデプロイ中..."
 	}
 
-	// モバイル用ローダーをアップロード
-	if cfg.Targets.Mobile {
-		fmt.Printf("  モバイル アップロード...")
-		fileKey, err := client.UploadFile(loaderPath)
-		if err != nil {
-			fmt.Println()
-			return fmt.Errorf("ローダーアップロードエラー: %w", err)
-		}
-		fmt.Printf(" %s\n", successStyle.Render("✓"))
-		mobileFiles = &kintone.CustomizeFiles{JSFileKey: fileKey}
-	}
+	var deployErr error
+	ui.Spinner(spinnerTitle, func() {
+		var desktopFiles *kintone.CustomizeFiles
+		var mobileFiles *kintone.CustomizeFiles
 
-	// カスタマイズ設定を更新
-	fmt.Printf("  設定...")
-	scope := kintone.CustomizeScope(cfg.Scope)
-	if scope == "" {
-		scope = kintone.ScopeAll
-	}
-	if err := client.UpdateCustomize(cfg.Kintone.AppID, desktopFiles, mobileFiles, scope); err != nil {
-		fmt.Println()
-		return fmt.Errorf("カスタマイズ設定エラー: %w", err)
-	}
-	fmt.Printf(" %s\n", successStyle.Render("✓"))
-
-	// アプリをデプロイ（プレビューのみの場合はスキップ）
-	if !previewOnly {
-		fmt.Printf("  デプロイ...")
-		if err := client.DeployApp(cfg.Kintone.AppID); err != nil {
-			fmt.Println()
-			return fmt.Errorf("デプロイ開始エラー: %w", err)
+		// デスクトップ用ローダーをアップロード
+		if cfg.Targets.Desktop {
+			fileKey, err := client.UploadFile(loaderPath)
+			if err != nil {
+				deployErr = fmt.Errorf("ローダーアップロードエラー: %w", err)
+				return
+			}
+			desktopFiles = &kintone.CustomizeFiles{JSFileKey: fileKey}
 		}
 
-		if err := client.WaitForDeploy(cfg.Kintone.AppID); err != nil {
-			fmt.Println()
-			return fmt.Errorf("デプロイ待機エラー: %w", err)
+		// モバイル用ローダーをアップロード
+		if cfg.Targets.Mobile {
+			fileKey, err := client.UploadFile(loaderPath)
+			if err != nil {
+				deployErr = fmt.Errorf("ローダーアップロードエラー: %w", err)
+				return
+			}
+			mobileFiles = &kintone.CustomizeFiles{JSFileKey: fileKey}
 		}
-		fmt.Printf(" %s\n", successStyle.Render("✓"))
-	} else {
+
+		// カスタマイズ設定を更新
+		scope := kintone.CustomizeScope(cfg.Scope)
+		if scope == "" {
+			scope = kintone.ScopeAll
+		}
+		if err := client.UpdateCustomize(cfg.Kintone.AppID, desktopFiles, mobileFiles, scope); err != nil {
+			deployErr = fmt.Errorf("カスタマイズ設定エラー: %w", err)
+			return
+		}
+
+		// アプリをデプロイ（プレビューのみの場合はスキップ）
+		if !previewOnly {
+			if err := client.DeployApp(cfg.Kintone.AppID); err != nil {
+				deployErr = fmt.Errorf("デプロイ開始エラー: %w", err)
+				return
+			}
+
+			if err := client.WaitForDeploy(cfg.Kintone.AppID); err != nil {
+				deployErr = fmt.Errorf("デプロイ待機エラー: %w", err)
+				return
+			}
+		}
+	})
+
+	if deployErr != nil {
+		return deployErr
+	}
+
+	if previewOnly {
 		ui.Warn("プレビュー環境のみに適用（本番反映はスキップ）")
 	}
 
