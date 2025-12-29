@@ -15,6 +15,7 @@ import (
 
 var forceOverwrite bool
 var previewOnlyDeploy bool
+var skipVersionDeploy bool
 
 var deployCmd = &cobra.Command{
 	Use:   "deploy",
@@ -26,6 +27,7 @@ var deployCmd = &cobra.Command{
 func init() {
 	deployCmd.Flags().BoolVarP(&forceOverwrite, "force", "f", false, "既存カスタマイズを確認せず上書き")
 	deployCmd.Flags().BoolVarP(&previewOnlyDeploy, "preview", "p", false, "プレビュー環境のみにデプロイ（本番反映しない）")
+	deployCmd.Flags().BoolVar(&skipVersionDeploy, "skip-version", false, "バージョン確認をスキップ")
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {
@@ -71,7 +73,8 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("キャンセルされました")
 		}
 		if rebuild {
-			fmt.Printf("\n%s ビルドを開始...\n", cyan("→"))
+			// deploy の --skip-version を build に引き継ぐ
+			skipVersion = skipVersionDeploy
 			if err := runBuild(nil, nil); err != nil {
 				return fmt.Errorf("ビルドエラー: %w", err)
 			}
@@ -79,7 +82,9 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		}
 	} else {
 		// dist/が存在しない場合は自動でビルド
-		fmt.Printf("\n%s dist/ が見つかりません。ビルドを開始...\n", cyan("→"))
+		fmt.Printf("%s dist/ が見つかりません。ビルドを開始...\n", cyan("→"))
+		// deploy の --skip-version を build に引き継ぐ
+		skipVersion = skipVersionDeploy
 		if err := runBuild(nil, nil); err != nil {
 			return fmt.Errorf("ビルドエラー: %w", err)
 		}
