@@ -102,8 +102,55 @@ VERSION := 0.2.1
 1. `Makefile` の `VERSION` を更新
 2. ビルド: `make build-all`（package.json も自動更新される）
 3. コミット: `chore: バージョンを v0.x.x に更新`
-4. タグ追加: `git tag v0.x.x`
+4. タグ追加: `git tag v0.x.x && git push origin v0.x.x`
 5. npm公開: `make npm-publish-token TOKEN=xxx`
+6. GitHubリリース作成: 下記「GitHubリリース作成」セクション参照
+
+### GitHubリリース作成
+
+`gh release create` コマンドでリリースを作成する。リリースノートには各変更のコミットIDを含める（GitHubが自動でリンクに変換する）。
+
+```bash
+gh release create v0.x.x --title "v0.x.x" --notes "$(cat <<'EOF'
+## 変更内容
+
+### 新機能
+- 機能の説明 (a1b2c3d)
+
+### 改善
+- 改善の説明 (e4f5g6h)
+
+### バグ修正
+- 修正の説明 (i7j8k9l)
+EOF
+)"
+```
+
+#### リリースノートの書き方
+
+1. **変更をカテゴリ分け**: 新機能、改善、バグ修正、その他
+2. **各変更にコミットIDを追記**: `(abc1234)` 形式
+3. **コミット一覧の取得方法**:
+   ```bash
+   # 前回リリースからの変更一覧を取得
+   git log v0.x.x..HEAD --oneline
+   ```
+
+#### リリースノート例
+
+```markdown
+## 変更内容
+
+### 新機能
+- init コマンドに --scope オプションを追加 (a1b2c3d)
+- ドメイン自動補完機能を追加 (e4f5g6h)
+
+### 改善
+- CLI出力を日本語に統一 (i7j8k9l)
+
+### バグ修正
+- package.json のキー順序を修正 (m0n1o2p)
+```
 
 ## コミットポリシー
 
