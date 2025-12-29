@@ -38,6 +38,10 @@ func GenerateProject(projectDir string, answers *prompt.InitAnswers) error {
 		return err
 	}
 
+	if err := generateESLintConfig(projectDir, answers.Framework, answers.Language); err != nil {
+		return err
+	}
+
 	// TypeScript の場合は tsconfig.json と型定義プレースホルダーを生成
 	if answers.Language == prompt.LanguageTypeScript {
 		if err := generateTSConfig(projectDir, answers.Framework); err != nil {
@@ -165,6 +169,7 @@ type packageScripts struct {
 	Build         string `json:"build"`
 	Deploy        string `json:"deploy"`
 	DeployPreview string `json:"deploy:preview"`
+	Lint          string `json:"lint"`
 	Types         string `json:"types,omitempty"`
 }
 
@@ -177,6 +182,7 @@ func generatePackageJSON(projectDir string, answers *prompt.InitAnswers) error {
 		Build:         "kcdev build",
 		Deploy:        "kcdev deploy",
 		DeployPreview: "kcdev deploy --preview",
+		Lint:          "eslint --config .kcdev/eslint.config.js src/",
 	}
 
 	// TypeScript の場合は types スクリプトを追加
@@ -215,9 +221,15 @@ func getFrameworkDependencies(framework prompt.Framework, language prompt.Langua
 
 	deps.devDependencies["vite"] = "^5.0.0"
 
+	// ESLint 共通
+	deps.devDependencies["eslint"] = "^9.0.0"
+	deps.devDependencies["@eslint/js"] = "^9.0.0"
+	deps.devDependencies["globals"] = "^15.0.0"
+
 	if language == prompt.LanguageTypeScript {
 		deps.devDependencies["typescript"] = "^5.3.0"
 		deps.devDependencies["@kintone/dts-gen"] = "^8.0.0"
+		deps.devDependencies["typescript-eslint"] = "^8.0.0"
 	}
 
 	switch framework {
@@ -225,6 +237,7 @@ func getFrameworkDependencies(framework prompt.Framework, language prompt.Langua
 		deps.dependencies["react"] = "^18.2.0"
 		deps.dependencies["react-dom"] = "^18.2.0"
 		deps.devDependencies["@vitejs/plugin-react"] = "^4.2.0"
+		deps.devDependencies["eslint-plugin-react-hooks"] = "^5.0.0"
 		if language == prompt.LanguageTypeScript {
 			deps.devDependencies["@types/react"] = "^18.2.0"
 			deps.devDependencies["@types/react-dom"] = "^18.2.0"
@@ -232,12 +245,14 @@ func getFrameworkDependencies(framework prompt.Framework, language prompt.Langua
 	case prompt.FrameworkVue:
 		deps.dependencies["vue"] = "^3.4.0"
 		deps.devDependencies["@vitejs/plugin-vue"] = "^5.0.0"
+		deps.devDependencies["eslint-plugin-vue"] = "^9.0.0"
 		if language == prompt.LanguageTypeScript {
 			deps.devDependencies["vue-tsc"] = "^1.8.0"
 		}
 	case prompt.FrameworkSvelte:
 		deps.dependencies["svelte"] = "^4.2.0"
 		deps.devDependencies["@sveltejs/vite-plugin-svelte"] = "^3.0.0"
+		deps.devDependencies["eslint-plugin-svelte"] = "^2.0.0"
 		if language == prompt.LanguageTypeScript {
 			deps.devDependencies["svelte-check"] = "^3.6.0"
 			deps.devDependencies["tslib"] = "^2.6.0"
@@ -361,6 +376,221 @@ kcdev deploy
 `, answers.ProjectName, answers.Domain, answers.AppID)
 
 	return os.WriteFile(filepath.Join(projectDir, "README.md"), []byte(content), 0644)
+}
+
+func generateESLintConfig(projectDir string, framework prompt.Framework, language prompt.Language) error {
+	var content string
+
+	switch framework {
+	case prompt.FrameworkReact:
+		content = generateESLintReact(language)
+	case prompt.FrameworkVue:
+		content = generateESLintVue(language)
+	case prompt.FrameworkSvelte:
+		content = generateESLintSvelte(language)
+	default:
+		content = generateESLintVanilla(language)
+	}
+
+	kcdevDir := filepath.Join(projectDir, ".kcdev")
+	if err := os.MkdirAll(kcdevDir, 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(kcdevDir, "eslint.config.js"), []byte(content), 0644)
+}
+
+func generateESLintVanilla(language prompt.Language) string {
+	if language == prompt.LanguageTypeScript {
+		return `import js from "@eslint/js";
+import tseslint from "typescript-eslint";
+import globals from "globals";
+
+export default tseslint.config(
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        kintone: "readonly",
+      },
+    },
+  },
+  {
+    ignores: ["dist/", ".kcdev/"],
+  }
+);
+`
+	}
+	return `import js from "@eslint/js";
+import globals from "globals";
+
+export default [
+  js.configs.recommended,
+  {
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        kintone: "readonly",
+      },
+    },
+  },
+  {
+    ignores: ["dist/", ".kcdev/"],
+  },
+];
+`
+}
+
+func generateESLintReact(language prompt.Language) string {
+	if language == prompt.LanguageTypeScript {
+		return `import js from "@eslint/js";
+import tseslint from "typescript-eslint";
+import reactHooks from "eslint-plugin-react-hooks";
+import globals from "globals";
+
+export default tseslint.config(
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    plugins: {
+      "react-hooks": reactHooks,
+    },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+    },
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        kintone: "readonly",
+      },
+    },
+  },
+  {
+    ignores: ["dist/", ".kcdev/"],
+  }
+);
+`
+	}
+	return `import js from "@eslint/js";
+import reactHooks from "eslint-plugin-react-hooks";
+import globals from "globals";
+
+export default [
+  js.configs.recommended,
+  {
+    plugins: {
+      "react-hooks": reactHooks,
+    },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+    },
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        kintone: "readonly",
+      },
+    },
+  },
+  {
+    ignores: ["dist/", ".kcdev/"],
+  },
+];
+`
+}
+
+func generateESLintVue(language prompt.Language) string {
+	if language == prompt.LanguageTypeScript {
+		return `import js from "@eslint/js";
+import tseslint from "typescript-eslint";
+import pluginVue from "eslint-plugin-vue";
+import globals from "globals";
+
+export default tseslint.config(
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  ...pluginVue.configs["flat/recommended"],
+  {
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        kintone: "readonly",
+      },
+    },
+  },
+  {
+    ignores: ["dist/", ".kcdev/"],
+  }
+);
+`
+	}
+	return `import js from "@eslint/js";
+import pluginVue from "eslint-plugin-vue";
+import globals from "globals";
+
+export default [
+  js.configs.recommended,
+  ...pluginVue.configs["flat/recommended"],
+  {
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        kintone: "readonly",
+      },
+    },
+  },
+  {
+    ignores: ["dist/", ".kcdev/"],
+  },
+];
+`
+}
+
+func generateESLintSvelte(language prompt.Language) string {
+	if language == prompt.LanguageTypeScript {
+		return `import js from "@eslint/js";
+import tseslint from "typescript-eslint";
+import svelte from "eslint-plugin-svelte";
+import globals from "globals";
+
+export default tseslint.config(
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  ...svelte.configs["flat/recommended"],
+  {
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        kintone: "readonly",
+      },
+    },
+  },
+  {
+    ignores: ["dist/", ".kcdev/"],
+  }
+);
+`
+	}
+	return `import js from "@eslint/js";
+import svelte from "eslint-plugin-svelte";
+import globals from "globals";
+
+export default [
+  js.configs.recommended,
+  ...svelte.configs["flat/recommended"],
+  {
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        kintone: "readonly",
+      },
+    },
+  },
+  {
+    ignores: ["dist/", ".kcdev/"],
+  },
+];
+`
 }
 
 func GetEntryPath(framework prompt.Framework, language prompt.Language) string {
