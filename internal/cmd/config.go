@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -10,6 +12,7 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/fatih/color"
 	"github.com/kintone/kcdev/internal/config"
+	"github.com/kintone/kcdev/internal/generator"
 	"github.com/kintone/kcdev/internal/prompt"
 	"github.com/spf13/cobra"
 )
@@ -85,6 +88,13 @@ func runConfig(cmd *cobra.Command, args []string) error {
 			if err := cfg.Save(cwd); err != nil {
 				return err
 			}
+		case "framework":
+			if err := editFramework(cwd, cfg); err != nil {
+				return err
+			}
+			if err := cfg.Save(cwd); err != nil {
+				return err
+			}
 		case "exit":
 			fmt.Println("\n設定を終了します。")
 			return nil
@@ -100,6 +110,7 @@ func askConfigAction() (string, error) {
 		"適用範囲の設定",
 		"出力ファイル名の設定",
 		"エントリーファイルの設定",
+		"フレームワークの変更",
 		"終了",
 	}
 
@@ -125,6 +136,8 @@ func askConfigAction() (string, error) {
 		return "output", nil
 	case options[5]:
 		return "entry", nil
+	case options[6]:
+		return "framework", nil
 	default:
 		return "exit", nil
 	}
@@ -351,4 +364,227 @@ func editEntry(projectDir string, cfg *config.Config) error {
 
 	fmt.Printf("\n%s エントリーファイルを更新しました (%s)\n", green("✓"), selected)
 	return nil
+}
+
+func editFramework(projectDir string, cfg *config.Config) error {
+	cyan := color.New(color.FgCyan).SprintFunc()
+	green := color.New(color.FgGreen).SprintFunc()
+	yellow := color.New(color.FgYellow).SprintFunc()
+
+	fmt.Printf("\n%s フレームワークの変更\n\n", cyan("🔧"))
+
+	// 現在のフレームワークを検出
+	currentFramework := detectCurrentFramework(projectDir)
+	currentLanguage := detectCurrentLanguage(projectDir)
+
+	fmt.Printf("現在のフレームワーク: %s (%s)\n\n", cyan(string(currentFramework)), string(currentLanguage))
+
+	// 新しいフレームワークを選択
+	newFramework, err := prompt.AskFramework()
+	if err != nil {
+		return err
+	}
+
+	if newFramework == currentFramework {
+		fmt.Printf("\n%s フレームワークは変更されていません\n", yellow("⚠"))
+		fmt.Println("Enterキーで戻る...")
+		fmt.Scanln()
+		return nil
+	}
+
+	// 確認
+	var confirm bool
+	confirmPrompt := &survey.Confirm{
+		Message: fmt.Sprintf("%s から %s に変更しますか?", currentFramework, newFramework),
+		Default: true,
+	}
+	if err := survey.AskOne(confirmPrompt, &confirm); err != nil {
+		return err
+	}
+	if !confirm {
+		return nil
+	}
+
+	fmt.Println()
+
+	// 1. package.json を更新
+	fmt.Printf("  package.json を更新...")
+	if err := updatePackageJSONFramework(projectDir, currentFramework, newFramework, currentLanguage); err != nil {
+		fmt.Println()
+		return fmt.Errorf("package.json更新エラー: %w", err)
+	}
+	fmt.Printf(" %s\n", green("✓"))
+
+	// 2. vite.config.ts を再生成
+	fmt.Printf("  vite.config.ts を再生成...")
+	if err := generator.GenerateViteConfig(projectDir, newFramework, currentLanguage); err != nil {
+		fmt.Println()
+		return fmt.Errorf("vite.config.ts再生成エラー: %w", err)
+	}
+	fmt.Printf(" %s\n", green("✓"))
+
+	// 3. eslint.config.js を再生成
+	fmt.Printf("  eslint.config.js を再生成...")
+	if err := generator.RegenerateESLintConfig(projectDir, newFramework, currentLanguage); err != nil {
+		fmt.Println()
+		return fmt.Errorf("eslint.config.js再生成エラー: %w", err)
+	}
+	fmt.Printf(" %s\n", green("✓"))
+
+	// 4. node_modules を削除
+	fmt.Printf("  node_modules を削除...")
+	nodeModulesPath := filepath.Join(projectDir, "node_modules")
+	if err := os.RemoveAll(nodeModulesPath); err != nil {
+		fmt.Println()
+		return fmt.Errorf("node_modules削除エラー: %w", err)
+	}
+	fmt.Printf(" %s\n", green("✓"))
+
+	// 5. パッケージマネージャーを検出してインストール
+	pm := detectPackageManager(projectDir)
+	fmt.Printf("\n%s パッケージを再インストール中... (%s)\n", cyan("→"), pm)
+
+	installCmd := exec.Command(pm, "install")
+	installCmd.Dir = projectDir
+	installCmd.Stdout = os.Stdout
+	installCmd.Stderr = os.Stderr
+
+	if err := installCmd.Run(); err != nil {
+		return fmt.Errorf("インストールエラー: %w", err)
+	}
+
+	// 6. config.json のエントリーパスを更新
+	cfg.Dev.Entry = generator.GetEntryPath(newFramework, currentLanguage)
+
+	fmt.Printf("\n%s フレームワークを %s に変更しました!\n\n", green("✓"), newFramework)
+	fmt.Printf("%s src/ ディレクトリのコードを手動で書き換えてください\n", yellow("⚠"))
+	fmt.Printf("  エントリーファイル: %s\n\n", cfg.Dev.Entry)
+	fmt.Println("Enterキーで戻る...")
+	fmt.Scanln()
+
+	return nil
+}
+
+func detectCurrentFramework(projectDir string) prompt.Framework {
+	pkgPath := filepath.Join(projectDir, "package.json")
+	data, err := os.ReadFile(pkgPath)
+	if err != nil {
+		return prompt.FrameworkVanilla
+	}
+
+	content := string(data)
+	if strings.Contains(content, `"react"`) {
+		return prompt.FrameworkReact
+	}
+	if strings.Contains(content, `"vue"`) {
+		return prompt.FrameworkVue
+	}
+	if strings.Contains(content, `"svelte"`) {
+		return prompt.FrameworkSvelte
+	}
+	return prompt.FrameworkVanilla
+}
+
+func detectCurrentLanguage(projectDir string) prompt.Language {
+	pkgPath := filepath.Join(projectDir, "package.json")
+	data, err := os.ReadFile(pkgPath)
+	if err != nil {
+		return prompt.LanguageJavaScript
+	}
+
+	if strings.Contains(string(data), `"typescript"`) {
+		return prompt.LanguageTypeScript
+	}
+	return prompt.LanguageJavaScript
+}
+
+func updatePackageJSONFramework(projectDir string, oldFw, newFw prompt.Framework, lang prompt.Language) error {
+	pkgPath := filepath.Join(projectDir, "package.json")
+	data, err := os.ReadFile(pkgPath)
+	if err != nil {
+		return err
+	}
+
+	var pkg map[string]interface{}
+	if err := json.Unmarshal(data, &pkg); err != nil {
+		return err
+	}
+
+	deps, _ := pkg["dependencies"].(map[string]interface{})
+	if deps == nil {
+		deps = make(map[string]interface{})
+		pkg["dependencies"] = deps
+	}
+
+	devDeps, _ := pkg["devDependencies"].(map[string]interface{})
+	if devDeps == nil {
+		devDeps = make(map[string]interface{})
+		pkg["devDependencies"] = devDeps
+	}
+
+	// 旧フレームワークのパッケージを削除
+	removeFrameworkPackages(deps, devDeps, oldFw)
+
+	// 新フレームワークのパッケージを追加
+	addFrameworkPackages(deps, devDeps, newFw, lang)
+
+	// JSON を書き出し
+	output, err := json.MarshalIndent(pkg, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(pkgPath, output, 0644)
+}
+
+func removeFrameworkPackages(deps, devDeps map[string]interface{}, fw prompt.Framework) {
+	switch fw {
+	case prompt.FrameworkReact:
+		delete(deps, "react")
+		delete(deps, "react-dom")
+		delete(devDeps, "@vitejs/plugin-react")
+		delete(devDeps, "eslint-plugin-react-hooks")
+		delete(devDeps, "@types/react")
+		delete(devDeps, "@types/react-dom")
+	case prompt.FrameworkVue:
+		delete(deps, "vue")
+		delete(devDeps, "@vitejs/plugin-vue")
+		delete(devDeps, "eslint-plugin-vue")
+		delete(devDeps, "vue-tsc")
+	case prompt.FrameworkSvelte:
+		delete(deps, "svelte")
+		delete(devDeps, "@sveltejs/vite-plugin-svelte")
+		delete(devDeps, "eslint-plugin-svelte")
+		delete(devDeps, "svelte-check")
+		delete(devDeps, "tslib")
+	}
+}
+
+func addFrameworkPackages(deps, devDeps map[string]interface{}, fw prompt.Framework, lang prompt.Language) {
+	switch fw {
+	case prompt.FrameworkReact:
+		deps["react"] = "^18.2.0"
+		deps["react-dom"] = "^18.2.0"
+		devDeps["@vitejs/plugin-react"] = "^4.2.0"
+		devDeps["eslint-plugin-react-hooks"] = "^5.0.0"
+		if lang == prompt.LanguageTypeScript {
+			devDeps["@types/react"] = "^18.2.0"
+			devDeps["@types/react-dom"] = "^18.2.0"
+		}
+	case prompt.FrameworkVue:
+		deps["vue"] = "^3.4.0"
+		devDeps["@vitejs/plugin-vue"] = "^5.0.0"
+		devDeps["eslint-plugin-vue"] = "^9.0.0"
+		if lang == prompt.LanguageTypeScript {
+			devDeps["vue-tsc"] = "^1.8.0"
+		}
+	case prompt.FrameworkSvelte:
+		deps["svelte"] = "^4.2.0"
+		devDeps["@sveltejs/vite-plugin-svelte"] = "^3.0.0"
+		devDeps["eslint-plugin-svelte"] = "^2.0.0"
+		if lang == prompt.LanguageTypeScript {
+			devDeps["svelte-check"] = "^3.6.0"
+			devDeps["tslib"] = "^2.6.0"
+		}
+	}
 }

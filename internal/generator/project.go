@@ -378,6 +378,11 @@ kcdev deploy
 	return os.WriteFile(filepath.Join(projectDir, "README.md"), []byte(content), 0644)
 }
 
+// RegenerateESLintConfig は既存プロジェクトのESLint設定を再生成する
+func RegenerateESLintConfig(projectDir string, framework prompt.Framework, language prompt.Language) error {
+	return generateESLintConfig(projectDir, framework, language)
+}
+
 func generateESLintConfig(projectDir string, framework prompt.Framework, language prompt.Language) error {
 	var content string
 
