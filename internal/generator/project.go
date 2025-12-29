@@ -149,31 +149,49 @@ func copyTemplates(projectDir string, templateDir string) error {
 	})
 }
 
+type packageJSON struct {
+	Name            string            `json:"name"`
+	Version         string            `json:"version"`
+	Private         bool              `json:"private"`
+	Type            string            `json:"type"`
+	Scripts         packageScripts    `json:"scripts"`
+	Dependencies    map[string]string `json:"dependencies"`
+	DevDependencies map[string]string `json:"devDependencies"`
+}
+
+type packageScripts struct {
+	Dev           string `json:"dev"`
+	DevPreview    string `json:"dev:preview"`
+	Build         string `json:"build"`
+	Deploy        string `json:"deploy"`
+	DeployPreview string `json:"deploy:preview"`
+	Types         string `json:"types,omitempty"`
+}
+
 func generatePackageJSON(projectDir string, answers *prompt.InitAnswers) error {
 	deps := getFrameworkDependencies(answers.Framework, answers.Language)
 
-	scripts := map[string]string{
-		"init":           "kcdev init",
-		"dev":            "kcdev dev",
-		"dev:preview":    "kcdev dev --preview",
-		"build":          "kcdev build",
-		"deploy":         "kcdev deploy",
-		"deploy:preview": "kcdev deploy --preview",
+	scripts := packageScripts{
+		Dev:           "kcdev dev",
+		DevPreview:    "kcdev dev --preview",
+		Build:         "kcdev build",
+		Deploy:        "kcdev deploy",
+		DeployPreview: "kcdev deploy --preview",
 	}
 
 	// TypeScript の場合は types スクリプトを追加
 	if answers.Language == prompt.LanguageTypeScript {
-		scripts["types"] = "kcdev types"
+		scripts.Types = "kcdev types"
 	}
 
-	pkg := map[string]interface{}{
-		"name":            answers.ProjectName,
-		"version":         "0.0.0",
-		"private":         true,
-		"type":            "module",
-		"scripts":         scripts,
-		"dependencies":    deps.dependencies,
-		"devDependencies": deps.devDependencies,
+	pkg := packageJSON{
+		Name:            answers.ProjectName,
+		Version:         "0.0.0",
+		Private:         true,
+		Type:            "module",
+		Scripts:         scripts,
+		Dependencies:    deps.dependencies,
+		DevDependencies: deps.devDependencies,
 	}
 
 	data, err := json.MarshalIndent(pkg, "", "  ")
