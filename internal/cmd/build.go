@@ -11,11 +11,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	noMinify bool
+)
+
 var buildCmd = &cobra.Command{
 	Use:   "build",
 	Short: "本番用ビルドを生成",
 	Long:  `Vite build を実行し、IIFE形式のファイルを生成します。`,
 	RunE:  runBuild,
+}
+
+func init() {
+	buildCmd.Flags().BoolVar(&noMinify, "no-minify", false, "minifyを無効化（デバッグ用）")
 }
 
 func runBuild(cmd *cobra.Command, args []string) error {
@@ -42,7 +50,12 @@ func runBuild(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("%s バンドル中...\n", yellow("○"))
 
-	viteCmd := exec.Command("npx", "vite", "build", "--config", viteConfig, "--logLevel", "silent")
+	viteArgs := []string{"vite", "build", "--config", viteConfig, "--logLevel", "silent"}
+	if noMinify {
+		viteArgs = append(viteArgs, "--minify", "false")
+	}
+
+	viteCmd := exec.Command("npx", viteArgs...)
 	viteCmd.Dir = projectDir
 
 	// エラー出力のみキャプチャ
