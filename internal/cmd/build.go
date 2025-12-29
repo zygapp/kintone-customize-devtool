@@ -16,7 +16,8 @@ import (
 )
 
 var (
-	noMinify bool
+	noMinify    bool
+	skipVersion bool
 )
 
 var buildCmd = &cobra.Command{
@@ -28,6 +29,7 @@ var buildCmd = &cobra.Command{
 
 func init() {
 	buildCmd.Flags().BoolVar(&noMinify, "no-minify", false, "minifyを無効化（デバッグ用）")
+	buildCmd.Flags().BoolVar(&skipVersion, "skip-version", false, "バージョン確認をスキップ")
 }
 
 func runBuild(cmd *cobra.Command, args []string) error {
@@ -44,25 +46,27 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	cyan := color.New(color.FgCyan).SprintFunc()
 	yellow := color.New(color.FgYellow).SprintFunc()
 
-	// package.json からバージョンを読み込み
-	pkg, err := loadPackageJSON(projectDir)
-	if err != nil {
-		return fmt.Errorf("package.json の読み込みに失敗しました: %w", err)
-	}
-
-	currentVersion := fmt.Sprintf("%v", pkg["version"])
-	newVersion, err := askVersion(currentVersion)
-	if err != nil {
-		return err
-	}
-
-	// バージョンが変更された場合は保存
-	if newVersion != currentVersion {
-		pkg["version"] = newVersion
-		if err := savePackageJSON(projectDir, pkg); err != nil {
-			return fmt.Errorf("package.json の保存に失敗しました: %w", err)
+	// バージョン確認（スキップフラグがない場合）
+	if !skipVersion {
+		pkg, err := loadPackageJSON(projectDir)
+		if err != nil {
+			return fmt.Errorf("package.json の読み込みに失敗しました: %w", err)
 		}
-		fmt.Printf("%s バージョンを更新: %s → %s\n", green("✓"), currentVersion, newVersion)
+
+		currentVersion := fmt.Sprintf("%v", pkg["version"])
+		newVersion, err := askVersionUpdate(currentVersion)
+		if err != nil {
+			return err
+		}
+
+		// バージョンが変更された場合は保存
+		if newVersion != currentVersion {
+			pkg["version"] = newVersion
+			if err := savePackageJSON(projectDir, pkg); err != nil {
+				return fmt.Errorf("package.json の保存に失敗しました: %w", err)
+			}
+			fmt.Printf("%s バージョンを更新: %s → %s\n", green("✓"), currentVersion, newVersion)
+		}
 	}
 
 	fmt.Printf("\n%s ビルドを開始...\n", cyan("→"))
@@ -124,8 +128,24 @@ func savePackageJSON(projectDir string, pkg map[string]interface{}) error {
 	return os.WriteFile(filepath.Join(projectDir, "package.json"), data, 0644)
 }
 
-func askVersion(currentVersion string) (string, error) {
+func askVersionUpdate(currentVersion string) (string, error) {
 	cyan := color.New(color.FgCyan).SprintFunc()
+
+	fmt.Printf("現在のバージョン: %s\n", cyan(currentVersion))
+
+	// まずバージョンを更新するか確認
+	var updateVersion bool
+	confirmPrompt := &survey.Confirm{
+		Message: "バージョンを更新しますか?",
+		Default: false,
+	}
+	if err := survey.AskOne(confirmPrompt, &updateVersion); err != nil {
+		return "", err
+	}
+
+	if !updateVersion {
+		return currentVersion, nil
+	}
 
 	// バージョンをパース
 	parts := strings.Split(currentVersion, ".")
@@ -146,14 +166,11 @@ func askVersion(currentVersion string) (string, error) {
 	majorVersion := fmt.Sprintf("%d.%d.%d", major+1, 0, 0)
 
 	options := []string{
-		fmt.Sprintf("現在のまま (%s)", currentVersion),
 		fmt.Sprintf("パッチ更新 (%s)", patchVersion),
 		fmt.Sprintf("マイナー更新 (%s)", minorVersion),
 		fmt.Sprintf("メジャー更新 (%s)", majorVersion),
 		"カスタム入力",
 	}
-
-	fmt.Printf("現在のバージョン: %s\n\n", cyan(currentVersion))
 
 	var answer string
 	prompt := &survey.Select{
@@ -167,19 +184,17 @@ func askVersion(currentVersion string) (string, error) {
 
 	switch answer {
 	case options[0]:
-		return currentVersion, nil
-	case options[1]:
 		return patchVersion, nil
-	case options[2]:
+	case options[1]:
 		return minorVersion, nil
-	case options[3]:
+	case options[2]:
 		return majorVersion, nil
 	default:
 		// カスタム入力
 		var customVersion string
 		inputPrompt := &survey.Input{
 			Message: "バージョンを入力:",
-			Default: currentVersion,
+			Default: patchVersion,
 		}
 		if err := survey.AskOne(inputPrompt, &customVersion, survey.WithValidator(survey.Required)); err != nil {
 			return "", err
