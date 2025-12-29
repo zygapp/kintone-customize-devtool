@@ -389,8 +389,7 @@ func collectAnswers(projectDir string, projectName string) (*prompt.InitAnswers,
 	if flagOutput != "" {
 		answers.Output = flagOutput
 	} else {
-		// デフォルトはプロジェクト名
-		defaultOutput := answers.ProjectName
+		defaultOutput := "customize"
 		if cfg, err := config.Load(projectDir); err == nil && cfg.Output != "" {
 			defaultOutput = cfg.Output
 		}
