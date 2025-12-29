@@ -86,9 +86,9 @@ func runConfig(cmd *cobra.Command, args []string) error {
 func askConfigAction() (string, error) {
 	options := []string{
 		"現在の設定を表示",
-		"kintone接続設定 (ドメイン、アプリID、認証)",
-		"ターゲット (desktop/mobile) の設定",
-		"適用範囲 (scope) の設定",
+		"kintone接続設定（ドメイン、アプリID、認証）",
+		"ターゲット（デスクトップ/モバイル）の設定",
+		"適用範囲の設定",
 		"出力ファイル名の設定",
 		"終了",
 	}
@@ -168,8 +168,8 @@ func showCurrentConfig(cfg *config.Config) {
 
 	// Dev設定
 	fmt.Printf("\n%s\n", cyan("開発サーバー:"))
-	fmt.Printf("  Origin: %s\n", cfg.Dev.Origin)
-	fmt.Printf("  Entry:  %s\n", cfg.Dev.Entry)
+	fmt.Printf("  オリジン:     %s\n", cfg.Dev.Origin)
+	fmt.Printf("  エントリー:   %s\n", cfg.Dev.Entry)
 
 	fmt.Println()
 	fmt.Println("Enterキーで戻る...")

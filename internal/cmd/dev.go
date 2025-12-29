@@ -153,16 +153,16 @@ func deployLoader(projectDir string, cfg *config.Config, username, password stri
 
 			// 詳細を表示
 			if len(existing.Desktop.JS) > 0 {
-				fmt.Printf("    Desktop JS: %s\n", strings.Join(existing.Desktop.JS, ", "))
+				fmt.Printf("    デスクトップ JS: %s\n", strings.Join(existing.Desktop.JS, ", "))
 			}
 			if len(existing.Desktop.CSS) > 0 {
-				fmt.Printf("    Desktop CSS: %s\n", strings.Join(existing.Desktop.CSS, ", "))
+				fmt.Printf("    デスクトップ CSS: %s\n", strings.Join(existing.Desktop.CSS, ", "))
 			}
 			if len(existing.Mobile.JS) > 0 {
-				fmt.Printf("    Mobile JS: %s\n", strings.Join(existing.Mobile.JS, ", "))
+				fmt.Printf("    モバイル JS: %s\n", strings.Join(existing.Mobile.JS, ", "))
 			}
 			if len(existing.Mobile.CSS) > 0 {
-				fmt.Printf("    Mobile CSS: %s\n", strings.Join(existing.Mobile.CSS, ", "))
+				fmt.Printf("    モバイル CSS: %s\n", strings.Join(existing.Mobile.CSS, ", "))
 			}
 
 			fmt.Println()
@@ -188,7 +188,7 @@ func deployLoader(projectDir string, cfg *config.Config, username, password stri
 
 	// デスクトップ用ローダーをアップロード
 	if cfg.Targets.Desktop {
-		fmt.Printf("  Desktop アップロード...")
+		fmt.Printf("  デスクトップ アップロード...")
 		fileKey, err := client.UploadFile(loaderPath)
 		if err != nil {
 			fmt.Println()
@@ -200,7 +200,7 @@ func deployLoader(projectDir string, cfg *config.Config, username, password stri
 
 	// モバイル用ローダーをアップロード
 	if cfg.Targets.Mobile {
-		fmt.Printf("  Mobile アップロード...")
+		fmt.Printf("  モバイル アップロード...")
 		fileKey, err := client.UploadFile(loaderPath)
 		if err != nil {
 			fmt.Println()
@@ -251,24 +251,24 @@ func printDevInfo(cfg *config.Config) {
 	// ターゲット表示用の文字列を生成
 	var targets []string
 	if cfg.Targets.Desktop {
-		targets = append(targets, "Desktop")
+		targets = append(targets, "デスクトップ")
 	}
 	if cfg.Targets.Mobile {
-		targets = append(targets, "Mobile")
+		targets = append(targets, "モバイル")
 	}
 	if len(targets) == 0 {
-		targets = append(targets, "Desktop") // デフォルト
+		targets = append(targets, "デスクトップ") // デフォルト
 	}
 
-	fmt.Printf("\n%s Dev server を起動中...\n", cyan("→"))
+	fmt.Printf("\n%s 開発サーバーを起動中...\n", cyan("→"))
 	fmt.Printf("  %s  %s\n", green("➜"), cfg.Dev.Origin)
-	fmt.Printf("  %s  %s\n", cyan("Entry:"), cfg.Dev.Entry)
-	fmt.Printf("  %s  %s\n", cyan("Target:"), strings.Join(targets, ", "))
+	fmt.Printf("  %s     %s\n", cyan("エントリー:"), cfg.Dev.Entry)
+	fmt.Printf("  %s     %s\n", cyan("ターゲット:"), strings.Join(targets, ", "))
 
 	ok, msg, _ := generator.VerifyLoader(".")
 	if ok {
-		fmt.Printf("  %s  %s\n\n", green("Loader:"), msg)
+		fmt.Printf("  %s       %s\n\n", green("ローダー:"), msg)
 	} else {
-		fmt.Printf("  %s  %s\n\n", yellow("Loader:"), msg)
+		fmt.Printf("  %s       %s\n\n", yellow("ローダー:"), msg)
 	}
 }

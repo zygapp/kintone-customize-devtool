@@ -102,13 +102,13 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	// ターゲット表示用の文字列を生成
 	var targets []string
 	if cfg.Targets.Desktop {
-		targets = append(targets, "Desktop")
+		targets = append(targets, "デスクトップ")
 	}
 	if cfg.Targets.Mobile {
-		targets = append(targets, "Mobile")
+		targets = append(targets, "モバイル")
 	}
 	if len(targets) == 0 {
-		targets = append(targets, "Desktop") // デフォルト
+		targets = append(targets, "デスクトップ") // デフォルト
 	}
 
 	if previewOnlyDeploy {
@@ -132,16 +132,16 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 			// 詳細を表示
 			if len(existing.Desktop.JS) > 0 {
-				fmt.Printf("    Desktop JS: %s\n", strings.Join(existing.Desktop.JS, ", "))
+				fmt.Printf("    デスクトップ JS: %s\n", strings.Join(existing.Desktop.JS, ", "))
 			}
 			if len(existing.Desktop.CSS) > 0 {
-				fmt.Printf("    Desktop CSS: %s\n", strings.Join(existing.Desktop.CSS, ", "))
+				fmt.Printf("    デスクトップ CSS: %s\n", strings.Join(existing.Desktop.CSS, ", "))
 			}
 			if len(existing.Mobile.JS) > 0 {
-				fmt.Printf("    Mobile JS: %s\n", strings.Join(existing.Mobile.JS, ", "))
+				fmt.Printf("    モバイル JS: %s\n", strings.Join(existing.Mobile.JS, ", "))
 			}
 			if len(existing.Mobile.CSS) > 0 {
-				fmt.Printf("    Mobile CSS: %s\n", strings.Join(existing.Mobile.CSS, ", "))
+				fmt.Printf("    モバイル CSS: %s\n", strings.Join(existing.Mobile.CSS, ", "))
 			}
 
 			fmt.Println()
@@ -173,7 +173,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	// デスクトップ用ファイルをアップロード
 	if cfg.Targets.Desktop {
-		fmt.Printf("  Desktop JS...")
+		fmt.Printf("  デスクトップ JS...")
 		jsKey, err := client.UploadFile(jsPath)
 		if err != nil {
 			fmt.Println()
@@ -184,7 +184,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		desktopFiles = &kintone.CustomizeFiles{JSFileKey: jsKey}
 
 		if hasCss {
-			fmt.Printf("  Desktop CSS...")
+			fmt.Printf("  デスクトップ CSS...")
 			cssKey, err := client.UploadFile(cssPath)
 			if err != nil {
 				fmt.Println()
@@ -197,7 +197,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	// モバイル用ファイルをアップロード
 	if cfg.Targets.Mobile {
-		fmt.Printf("  Mobile JS...")
+		fmt.Printf("  モバイル JS...")
 		jsKey, err := client.UploadFile(jsPath)
 		if err != nil {
 			fmt.Println()
@@ -208,7 +208,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		mobileFiles = &kintone.CustomizeFiles{JSFileKey: jsKey}
 
 		if hasCss {
-			fmt.Printf("  Mobile CSS...")
+			fmt.Printf("  モバイル CSS...")
 			cssKey, err := client.UploadFile(cssPath)
 			if err != nil {
 				fmt.Println()

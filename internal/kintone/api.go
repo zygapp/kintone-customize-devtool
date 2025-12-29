@@ -246,16 +246,16 @@ func (e *ExistingCustomizations) HasExisting() bool {
 func (e *ExistingCustomizations) Summary() string {
 	var parts []string
 	if len(e.Desktop.JS) > 0 {
-		parts = append(parts, fmt.Sprintf("Desktop JS: %d件", len(e.Desktop.JS)))
+		parts = append(parts, fmt.Sprintf("デスクトップ JS: %d件", len(e.Desktop.JS)))
 	}
 	if len(e.Desktop.CSS) > 0 {
-		parts = append(parts, fmt.Sprintf("Desktop CSS: %d件", len(e.Desktop.CSS)))
+		parts = append(parts, fmt.Sprintf("デスクトップ CSS: %d件", len(e.Desktop.CSS)))
 	}
 	if len(e.Mobile.JS) > 0 {
-		parts = append(parts, fmt.Sprintf("Mobile JS: %d件", len(e.Mobile.JS)))
+		parts = append(parts, fmt.Sprintf("モバイル JS: %d件", len(e.Mobile.JS)))
 	}
 	if len(e.Mobile.CSS) > 0 {
-		parts = append(parts, fmt.Sprintf("Mobile CSS: %d件", len(e.Mobile.CSS)))
+		parts = append(parts, fmt.Sprintf("モバイル CSS: %d件", len(e.Mobile.CSS)))
 	}
 	if len(parts) == 0 {
 		return "なし"
