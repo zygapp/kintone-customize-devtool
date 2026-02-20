@@ -1,6 +1,6 @@
 {
   "name": "@zygapp/kintone-customize-devtool",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "kintone customize developer - Vite + HMR で kintone カスタマイズ開発",
   "bin": {
     "kcdev": "bin/kcdev"
