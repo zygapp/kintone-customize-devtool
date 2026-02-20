@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/kintone/kcdev/internal/config"
 	"github.com/kintone/kcdev/internal/generator"
@@ -56,6 +58,8 @@ func init() {
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
+	ui.Banner()
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
@@ -68,6 +72,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	answers, err := collectAnswers(cwd, projectName)
 	if err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return nil
+		}
 		return err
 	}
 
