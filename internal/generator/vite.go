@@ -44,6 +44,46 @@ const hasRootIndexHtml = fs.existsSync(path.join(projectRoot, 'index.html'))
 
 let cachedBundle: string | null = null
 
+async function buildBundle(plugins: any[]) {
+  const result = await build({
+    configFile: false,
+    logLevel: 'silent',
+    plugins,
+    define: {
+      'process.env.NODE_ENV': JSON.stringify('development'),
+    },
+    build: {
+      write: false,
+      lib: {
+        entry: srcEntry,
+        name: outputName,
+        formats: ['iife'],
+        fileName: () => outputName + '.js',
+      },
+      rolldownOptions: {
+        output: {
+          assetFileNames: outputName + '.[ext]',
+        },
+      },
+    },
+  })
+
+  const output = Array.isArray(result) ? result[0] : result
+  const jsChunk = output.output.find((o: any) => o.fileName === outputName + '.js')
+  const cssChunk = output.output.find((o: any) => o.fileName?.endsWith('.css'))
+
+  if (jsChunk && 'code' in jsChunk) {
+    let code = jsChunk.code
+    if (cssChunk && 'source' in cssChunk) {
+      const cssCode = ` + "`" + `(function(){var s=document.createElement('style');s.textContent=${JSON.stringify(cssChunk.source)};document.head.appendChild(s);})();` + "`" + `
+      code = cssCode + code
+    }
+    cachedBundle = code
+  } else {
+    throw new Error('Build output not found')
+  }
+}
+
 const kcdevPlugin = {
   name: 'kcdev',
   configureServer(server) {
@@ -86,55 +126,18 @@ const kcdevPlugin = {
       })
     }
 
-    // /${outputName}.js - Vite でリアルタイムバンドル
+    // /${outputName}.js - Vite でリアルタイムバンドル（ファイル変更時のみ再ビルド）
     server.middlewares.use(async (req, res, next) => {
       if (!req.url?.startsWith('/' + outputName + '.js')) {
         return next()
       }
 
       try {
-        const result = await build({
-          configFile: false,
-          logLevel: 'silent',
-          plugins: [%s],
-          define: {
-            'process.env.NODE_ENV': JSON.stringify('development'),
-          },
-          build: {
-            write: false,
-            lib: {
-              entry: srcEntry,
-              name: outputName,
-              formats: ['iife'],
-              fileName: () => outputName + '.js',
-            },
-            rollupOptions: {
-              output: {
-                assetFileNames: outputName + '.[ext]',
-              },
-            },
-          },
-        })
-
-        const output = Array.isArray(result) ? result[0] : result
-        const jsChunk = output.output.find((o: any) => o.fileName === outputName + '.js')
-        const cssChunk = output.output.find((o: any) => o.fileName?.endsWith('.css'))
-
-        if (jsChunk && 'code' in jsChunk) {
-          let code = jsChunk.code
-
-          // CSS をインライン化
-          if (cssChunk && 'source' in cssChunk) {
-            const cssCode = ` + "`" + `(function(){var s=document.createElement('style');s.textContent=${JSON.stringify(cssChunk.source)};document.head.appendChild(s);})();` + "`" + `
-            code = cssCode + code
-          }
-
-          cachedBundle = code
-          res.setHeader('Content-Type', 'application/javascript')
-          res.end(code)
-        } else {
-          throw new Error('Build output not found')
+        if (!cachedBundle) {
+          await buildBundle([%s])
         }
+        res.setHeader('Content-Type', 'application/javascript')
+        res.end(cachedBundle)
       } catch (err) {
         console.error('Build error:', err)
         res.statusCode = 500
@@ -168,15 +171,17 @@ export default defineConfig({
     },
     outDir: path.resolve(__dirname, '../dist'),
     emptyOutDir: true,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
         assetFileNames: outputName + '.[ext]',
+        minify: {
+          compress: {
+            dropDebugger: true,
+          },
+          mangleProps: false,
+        },
       },
     },
-  },
-  esbuild: {
-    drop: ['debugger'],
-    pure: ['console.log', 'console.info', 'console.debug', 'console.warn', 'console.trace'],
   },
 })
 `, imports, entry, getBuildPlugins(framework), plugins)
