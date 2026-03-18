@@ -7,7 +7,7 @@ export
 # ========================================
 # バージョン（ここを変更するだけで全体に反映）
 # ========================================
-VERSION := 0.4.1
+VERSION := 0.5.0
 
 BINARY_NAME := kcdev
 BUILD_DIR := build
@@ -27,6 +27,7 @@ clean:
 	rm -rf $(NPM_DIR)/bin/linux-*
 	rm -rf $(NPM_DIR)/bin/win32-*
 	rm -f $(NPM_DIR)/bin/.binary-path
+	rm -f $(NPM_DIR)/README.md
 
 test:
 	go test ./...
@@ -52,6 +53,8 @@ build-all: clean version-sync
 	@GOOS=windows GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-win32-x64.exe ./cmd/kcdev
 	@echo "Building win32-arm64..."
 	@GOOS=windows GOARCH=arm64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-win32-arm64.exe ./cmd/kcdev
+	@echo "Copying README.md to npm package..."
+	@cp README.md $(NPM_DIR)/README.md
 	@echo "Build complete!"
 
 # npmパッケージにバイナリをコピー
