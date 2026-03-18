@@ -103,23 +103,141 @@ func runDev(cmd *cobra.Command, args []string) error {
 		}()
 	}
 
+	terminated := make(chan struct{})
 	go func() {
 		<-sigChan
 		if viteCmd.Process != nil {
 			viteCmd.Process.Signal(syscall.SIGTERM)
 		}
+		close(terminated)
 	}()
 
-	err = viteCmd.Wait()
-	// シグナルによる終了は正常終了扱い
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			if exitErr.ExitCode() == -1 || exitErr.ProcessState.String() == "signal: terminated" {
-				return nil
+	waitErr := viteCmd.Wait()
+
+	// シグナルによる終了はビルド＋デプロイして終了
+	select {
+	case <-terminated:
+		fmt.Println()
+		deployBuildOnExit(projectDir, cfg, username, password)
+		return nil
+	default:
+		if waitErr != nil {
+			if exitErr, ok := waitErr.(*exec.ExitError); ok {
+				if exitErr.ExitCode() == -1 || exitErr.ProcessState.String() == "signal: terminated" {
+					return nil
+				}
 			}
 		}
+		return waitErr
 	}
-	return err
+}
+
+// deployBuildOnExit は dev server 終了時にビルドしてデプロイする
+func deployBuildOnExit(projectDir string, cfg *config.Config, username, password string) {
+	fmt.Println()
+	ui.Info("ビルドしてデプロイ中...")
+	fmt.Println()
+
+	// ビルド
+	viteConfig := filepath.Join(projectDir, config.ConfigDir, "vite.config.ts")
+	if _, err := os.Stat(filepath.Join(projectDir, "vite.config.ts")); err == nil {
+		viteConfig = filepath.Join(projectDir, "vite.config.ts")
+	}
+
+	viteArgs := []string{"vite", "build", "--config", viteConfig, "--logLevel", "silent", "--minify", "false"}
+
+	var buildErr error
+	ui.Spinner("ビルド中...", func() {
+		cmd := exec.Command("npx", viteArgs...)
+		cmd.Dir = projectDir
+		_, buildErr = cmd.CombinedOutput()
+	})
+	if buildErr != nil {
+		ui.Error(fmt.Sprintf("ビルドエラー: %v", buildErr))
+		return
+	}
+
+	// デプロイ
+	outputName := cfg.GetOutputName()
+	jsPath := filepath.Join(projectDir, "dist", outputName+".js")
+	cssPath := filepath.Join(projectDir, "dist", outputName+".css")
+
+	if _, err := os.Stat(jsPath); err != nil {
+		ui.Error("ビルド成果物が見つかりません")
+		return
+	}
+
+	client := kintone.NewClient(cfg.Kintone.Domain, username, password)
+
+	var deployErr error
+	ui.Spinner("デプロイ中...", func() {
+		var desktopFiles *kintone.CustomizeFiles
+		var mobileFiles *kintone.CustomizeFiles
+
+		if cfg.Targets.Desktop {
+			jsKey, err := client.UploadFile(jsPath)
+			if err != nil {
+				deployErr = fmt.Errorf("アップロードエラー: %w", err)
+				return
+			}
+			desktopFiles = &kintone.CustomizeFiles{JSFileKey: jsKey}
+
+			if _, err := os.Stat(cssPath); err == nil {
+				cssKey, err := client.UploadFile(cssPath)
+				if err != nil {
+					deployErr = fmt.Errorf("CSSアップロードエラー: %w", err)
+					return
+				}
+				desktopFiles.CSSFileKey = cssKey
+			}
+		}
+
+		if cfg.Targets.Mobile {
+			jsKey, err := client.UploadFile(jsPath)
+			if err != nil {
+				deployErr = fmt.Errorf("アップロードエラー: %w", err)
+				return
+			}
+			mobileFiles = &kintone.CustomizeFiles{JSFileKey: jsKey}
+
+			if _, err := os.Stat(cssPath); err == nil {
+				cssKey, err := client.UploadFile(cssPath)
+				if err != nil {
+					deployErr = fmt.Errorf("CSSアップロードエラー: %w", err)
+					return
+				}
+				mobileFiles.CSSFileKey = cssKey
+			}
+		}
+
+		scope := kintone.CustomizeScope(cfg.Scope)
+		if scope == "" {
+			scope = kintone.ScopeAll
+		}
+		if err := client.UpdateCustomize(cfg.Kintone.AppID, desktopFiles, mobileFiles, scope); err != nil {
+			deployErr = fmt.Errorf("カスタマイズ設定エラー: %w", err)
+			return
+		}
+
+		if err := client.DeployApp(cfg.Kintone.AppID); err != nil {
+			deployErr = fmt.Errorf("デプロイエラー: %w", err)
+			return
+		}
+
+		if err := client.WaitForDeploy(cfg.Kintone.AppID); err != nil {
+			deployErr = fmt.Errorf("デプロイ待機エラー: %w", err)
+			return
+		}
+	})
+
+	if deployErr != nil {
+		ui.Error(fmt.Sprintf("デプロイエラー: %v", deployErr))
+		return
+	}
+
+	fmt.Println()
+	ui.Success("ビルド成果物をデプロイしました")
+	fmt.Println()
 }
 
 func openBrowser(url string) error {
