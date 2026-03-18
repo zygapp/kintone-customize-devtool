@@ -189,13 +189,17 @@ kcdev config
 - エントリーファイル
 - フレームワーク変更（依存パッケージの入れ替え、設定ファイルの再生成を自動実行）
 
-### `kcdev update`
+### `kcdev upgrade`
 
-Vite およびフレームワークプラグインを最新版に更新します。
+プロジェクトの設定ファイルと依存パッケージを最新の kcdev 仕様に更新します。
 
 ```bash
-kcdev update
+kcdev upgrade
 ```
+
+**処理内容:**
+- Vite 設定の更新（Vite 8 対応: rolldownOptions, Oxc）
+- 依存パッケージを最新バージョンに更新
 
 ---
 
