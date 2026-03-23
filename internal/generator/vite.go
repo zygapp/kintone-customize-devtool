@@ -195,6 +195,7 @@ export default defineConfig({
         minify: {
           compress: {
             dropDebugger: true,
+            dropConsole: true,
           },
           mangleProps: false,
         },
