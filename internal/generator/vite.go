@@ -39,6 +39,24 @@ const configPath = path.resolve(__dirname, 'config.json')
 const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
 const outputName = config.output || 'customize'
 
+// Node.js モジュール外部化エラー回避: object-inspect の browser フィールドをパッチ
+;(function patchBrowserFalse() {
+  const targets = [
+    { pkg: 'object-inspect', entry: './util.inspect.js', shim: 'util.inspect.browser.js', content: 'module.exports = {};\\n' },
+  ]
+  for (const t of targets) {
+    try {
+      const pkgPath = path.resolve(__dirname, '../node_modules', t.pkg, 'package.json')
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
+      if (pkg.browser?.[t.entry] === false) {
+        fs.writeFileSync(path.resolve(path.dirname(pkgPath), t.shim), t.content)
+        pkg.browser[t.entry] = './' + t.shim
+        fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\\n')
+      }
+    } catch {}
+  }
+})()
+
 // プロジェクトルートにindex.htmlがあるか確認
 const hasRootIndexHtml = fs.existsSync(path.join(projectRoot, 'index.html'))
 
